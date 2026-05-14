@@ -1,6 +1,11 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from typing import List
 import secrets
+from pathlib import Path
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
@@ -11,12 +16,24 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database
-    DATABASE_URL: str = "postgresql+asyncpg://nhatro:nhatro_secret@localhost:5432/nhatro_db"
+    DATABASE_URL: str = ""
+    DATABASE_SSL_MODE: str = "require"
+    DATABASE_USE_NULL_POOL: bool = True
+    DATABASE_DISABLE_PREPARED_STATEMENT_CACHE: bool = True
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def database_url_required(cls, value: str) -> str:
+        if not value:
+            raise ValueError(
+                "DATABASE_URL is required. Use your Supabase PostgreSQL connection string."
+            )
+        return value
 
     # JWT
     SECRET_KEY: str = secrets.token_urlsafe(32)
@@ -52,7 +69,7 @@ class Settings(BaseSettings):
     BASIC_PLAN_MAX_ROOMS: int = 50
 
     class Config:
-        env_file = ".env"
+        env_file = BACKEND_DIR / ".env"
         case_sensitive = True
 
 

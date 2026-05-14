@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import time
 import logging
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.api.v1.router import api_router
@@ -22,6 +23,10 @@ async def lifespan(app: FastAPI):
     logger.info("Starting NhaTro Manager API...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if engine.dialect.name == "postgresql":
+            await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'platform_admin'"))
+            await conn.execute(text("ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'starter'"))
+            await conn.execute(text("ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'scale'"))
     logger.info("Database tables created/verified")
     yield
     # Shutdown

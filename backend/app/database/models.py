@@ -29,6 +29,7 @@ def gen_uuid():
 # ─────────────────────────────────────────────
 
 class UserRole(str, enum.Enum):
+    PLATFORM_ADMIN = "platform_admin"
     OWNER = "owner"
     MANAGER = "manager"
     TENANT = "tenant"
@@ -40,8 +41,20 @@ class OrgMemberRole(str, enum.Enum):
 
 class SubscriptionPlan(str, enum.Enum):
     FREE = "free"
+    STARTER = "starter"
     BASIC = "basic"
     PRO = "pro"
+    SCALE = "scale"
+
+class SaaSPaymentStatus(str, enum.Enum):
+    PENDING = "pending"
+    PAID = "paid"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class SaaSPaymentType(str, enum.Enum):
+    PLAN = "plan"
+    MODULE = "module"
 
 class RoomStatus(str, enum.Enum):
     AVAILABLE = "available"
@@ -129,6 +142,8 @@ class Organization(Base):
     members = relationship("OrganizationMember", back_populates="organization")
     boarding_houses = relationship("BoardingHouse", back_populates="organization")
     subscriptions = relationship("Subscription", back_populates="organization")
+    feature_entitlements = relationship("FeatureEntitlement", back_populates="organization")
+    saas_payments = relationship("SaaSPayment", back_populates="organization")
 
 
 class OrganizationMember(Base):
@@ -425,6 +440,46 @@ class Subscription(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     organization = relationship("Organization", back_populates="subscriptions")
+
+
+class FeatureEntitlement(Base):
+    __tablename__ = "feature_entitlements"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    feature_key = Column(String(100), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True)
+    source_payment_id = Column(UUID(as_uuid=False), ForeignKey("saas_payments.id"))
+    starts_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    organization = relationship("Organization", back_populates="feature_entitlements")
+
+
+class SaaSPayment(Base):
+    __tablename__ = "saas_payments"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False, index=True)
+    payment_type = Column(Enum(SaaSPaymentType), nullable=False)
+    status = Column(Enum(SaaSPaymentStatus), default=SaaSPaymentStatus.PENDING, nullable=False)
+    plan = Column(Enum(SubscriptionPlan))
+    feature_key = Column(String(100))
+    amount = Column(BigInteger, nullable=False)
+    provider = Column(String(50), default="manual")
+    checkout_url = Column(String(500))
+    reference_number = Column(String(100), unique=True, nullable=False, index=True)
+    metadata_json = Column(JSON, default=dict)
+    paid_at = Column(DateTime(timezone=True))
+    approved_by = Column(UUID(as_uuid=False), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organization = relationship("Organization", back_populates="saas_payments")
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class AuditLog(Base):

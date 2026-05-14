@@ -379,3 +379,81 @@ class PaginatedResponse(BaseModel):
     page: int
     size: int
     pages: int
+
+
+# ─────────────────────────────────────────────
+# SAAS BILLING / ADMIN SCHEMAS
+# ─────────────────────────────────────────────
+
+class PlanInfo(BaseModel):
+    key: str
+    name: str
+    price: int
+    max_rooms: Optional[int] = None
+    features: List[str]
+    is_current: bool = False
+
+
+class FeatureModuleInfo(BaseModel):
+    key: str
+    name: str
+    description: str
+    price: int
+    is_enabled: bool = False
+
+
+class CheckoutRequest(BaseModel):
+    plan: Optional[str] = None
+    feature_key: Optional[str] = None
+    provider: str = "manual"
+
+
+class CheckoutResponse(BaseModel):
+    payment_id: str
+    reference_number: str
+    amount: int
+    status: str
+    checkout_url: str
+
+
+class SaaSPaymentResponse(BaseModel):
+    id: str
+    organization_id: str
+    user_id: str
+    payment_type: str
+    status: str
+    plan: Optional[str] = None
+    feature_key: Optional[str] = None
+    amount: int
+    provider: str
+    reference_number: str
+    checkout_url: Optional[str] = None
+    paid_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class BillingOverview(BaseModel):
+    organization_id: str
+    organization_name: str
+    current_plan: str
+    plans: List[PlanInfo]
+    modules: List[FeatureModuleInfo]
+    recent_payments: List[SaaSPaymentResponse]
+
+
+class PlatformCustomerResponse(BaseModel):
+    organization_id: str
+    organization_name: str
+    owner_email: str
+    owner_name: str
+    plan: str
+    is_active: bool
+    created_at: datetime
+
+
+class PlatformStatsResponse(BaseModel):
+    owners: int
+    organizations: int
+    active_subscriptions: int
+    paid_revenue: int
+    pending_payments: int

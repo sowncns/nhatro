@@ -121,6 +121,17 @@ class ApiClient {
   getMaintenance = (params?: any) => this.client.get('/maintenance', { params })
   createMaintenance = (data: any) => this.client.post('/maintenance', data)
   updateMaintenance = (id: string, data: any) => this.client.patch(`/maintenance/${id}`, data)
+
+  // SaaS Billing for landlords
+  getBillingOverview = () => this.client.get('/billing/overview')
+  createCheckout = (data: { plan?: string; feature_key?: string; provider?: string }) => this.client.post('/billing/checkout', data)
+  simulatePaymentPaid = (paymentId: string) => this.client.post(`/billing/payments/${paymentId}/simulate-paid`)
+
+  // Platform admin
+  getPlatformStats = () => this.client.get('/admin/stats')
+  getPlatformCustomers = () => this.client.get('/admin/customers')
+  getPlatformPayments = (params?: any) => this.client.get('/admin/payments', { params })
+  approvePlatformPayment = (paymentId: string) => this.client.post(`/admin/payments/${paymentId}/approve`)
 }
 
 export const api = new ApiClient()

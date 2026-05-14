@@ -1,6 +1,19 @@
 """API Router - v1"""
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, rooms, boarding_houses, tenants, contracts, meter_readings, invoices, maintenance, dashboard, organizations
+from app.api.v1.endpoints import (
+    admin,
+    auth,
+    billing,
+    boarding_houses,
+    contracts,
+    dashboard,
+    invoices,
+    maintenance,
+    meter_readings,
+    organizations,
+    rooms,
+    tenants,
+)
 
 api_router = APIRouter()
 
@@ -14,3 +27,5 @@ api_router.include_router(meter_readings.router, prefix="/meter-readings", tags=
 api_router.include_router(invoices.router, prefix="/invoices", tags=["Invoices"])
 api_router.include_router(maintenance.router, prefix="/maintenance", tags=["Maintenance"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
+api_router.include_router(billing.router, prefix="/billing", tags=["SaaS Billing"])
+api_router.include_router(admin.router, prefix="/admin", tags=["Platform Admin"])

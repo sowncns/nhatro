@@ -5,7 +5,7 @@ from sqlalchemy import select
 from typing import Optional
 from app.core.security import verify_token
 from app.database.session import get_db
-from app.models.models import User, Organization, OrganizationMember
+from app.models.models import User, Organization, OrganizationMember, UserRole
 
 security = HTTPBearer()
 
@@ -82,6 +82,20 @@ async def get_tenant_context(
 
 def require_owner_or_manager(ctx: TenantContext = Depends(get_tenant_context)):
     """Only owner and managers can modify resources"""
-    if ctx.user.role not in ["owner", "manager"]:
+    if ctx.user.role not in [UserRole.OWNER, UserRole.MANAGER, "owner", "manager"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     return ctx
+
+
+def require_owner(ctx: TenantContext = Depends(get_tenant_context)):
+    """Only the paying landlord/owner can change SaaS billing."""
+    if ctx.user.role not in [UserRole.OWNER, "owner"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can manage billing")
+    return ctx
+
+
+def require_platform_admin(current_user: User = Depends(get_current_user)) -> User:
+    """Only platform admins can manage SaaS customers and payments."""
+    if current_user.role not in [UserRole.PLATFORM_ADMIN, "platform_admin"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Platform admin only")
+    return current_user

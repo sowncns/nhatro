@@ -1,13 +1,50 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from app.core.config import settings
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    echo=settings.DEBUG,
-)
+
+def _database_url_and_connect_args() -> tuple[str, dict]:
+    parsed = urlsplit(settings.DATABASE_URL)
+    scheme = parsed.scheme
+    if scheme == "postgresql":
+        scheme = "postgresql+asyncpg"
+
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    ssl_mode = query.pop("sslmode", settings.DATABASE_SSL_MODE)
+    query.pop("pgbouncer", None)
+
+    connect_args = {}
+    if ssl_mode and ssl_mode.lower() not in {"disable", "false", "0"}:
+        connect_args["ssl"] = True
+    if settings.DATABASE_DISABLE_PREPARED_STATEMENT_CACHE:
+        connect_args["prepared_statement_cache_size"] = 0
+
+    database_url = urlunsplit(
+        (
+            scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query),
+            parsed.fragment,
+        )
+    )
+    return database_url, connect_args
+
+
+database_url, connect_args = _database_url_and_connect_args()
+engine_kwargs = {
+    "echo": settings.DEBUG,
+    "pool_pre_ping": True,
+    "connect_args": connect_args,
+}
+if settings.DATABASE_USE_NULL_POOL:
+    engine_kwargs["poolclass"] = NullPool
+else:
+    engine_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
+    engine_kwargs["max_overflow"] = settings.DATABASE_MAX_OVERFLOW
+
+engine = create_async_engine(database_url, **engine_kwargs)
 
 AsyncSessionLocal = async_sessionmaker(
     engine,

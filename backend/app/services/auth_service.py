@@ -4,7 +4,7 @@ from typing import Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
-from python_slugify import slugify
+from slugify import slugify
 
 from app.models.models import User, Organization, RefreshToken, OrganizationMember, OrgMemberRole
 from app.core.security import (

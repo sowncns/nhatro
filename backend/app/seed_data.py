@@ -8,10 +8,12 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy import select
 from app.core.config import settings
 from app.core.security import hash_password
 from app.models.models import (
-    User, Organization, OrganizationMember, OrgMemberRole,
+    User, UserRole, Organization, SubscriptionPlan, OrganizationMember, OrgMemberRole,
+    Subscription, FeatureEntitlement, SaaSPayment, SaaSPaymentStatus, SaaSPaymentType,
     BoardingHouse, Room, Tenant, RoomTenant, Contract,
     MeterReading, Invoice, InvoiceStatus, RoomStatus
 )
@@ -27,6 +29,27 @@ async def seed():
     async with async_session() as db:
         print("🌱 Seeding database...")
 
+        existing_owner = await db.execute(select(User).where(User.email == "demo@nhatro.vn"))
+        if existing_owner.scalar_one_or_none():
+            print("✅ Demo data already exists, skipping duplicate seed.")
+            print("\n📋 Demo credentials:")
+            print("   Chủ trọ: demo@nhatro.vn / Demo@123456")
+            print("   Admin hệ thống: admin@nhatro.vn / Admin@123456")
+            return
+
+        # Create platform admin user
+        admin = User(
+            id=str(uuid.uuid4()),
+            email="admin@nhatro.vn",
+            hashed_password=hash_password("Admin@123456"),
+            full_name="Admin Hệ Thống",
+            phone="0900000000",
+            role=UserRole.PLATFORM_ADMIN,
+            is_active=True,
+            is_verified=True,
+        )
+        db.add(admin)
+
         # Create owner user
         owner = User(
             id=str(uuid.uuid4()),
@@ -34,7 +57,7 @@ async def seed():
             hashed_password=hash_password("Demo@123456"),
             full_name="Nguyễn Văn An",
             phone="0901234567",
-            role="owner",
+            role=UserRole.OWNER,
             is_active=True,
             is_verified=True,
         )
@@ -47,7 +70,7 @@ async def seed():
             name="Nhà Trọ Hoàng Gia",
             slug="nha-tro-hoang-gia",
             owner_id=owner.id,
-            subscription_plan="pro",
+            subscription_plan=SubscriptionPlan.PRO,
             address="123 Đường Nguyễn Trãi, Quận 1, TP.HCM",
             phone="0901234567",
             bank_name="Vietcombank",
@@ -56,6 +79,49 @@ async def seed():
         )
         db.add(org)
         await db.flush()
+
+        pro_payment = SaaSPayment(
+            id=str(uuid.uuid4()),
+            organization_id=org.id,
+            user_id=owner.id,
+            payment_type=SaaSPaymentType.PLAN,
+            status=SaaSPaymentStatus.PAID,
+            plan=SubscriptionPlan.PRO,
+            amount=399_000,
+            provider="manual",
+            reference_number="NHT-DEMO-PRO",
+            checkout_url="/billing/checkout/NHT-DEMO-PRO",
+            paid_at=datetime.now(timezone.utc),
+            approved_by=admin.id,
+        )
+        db.add(pro_payment)
+        await db.flush()
+
+        db.add(
+            Subscription(
+                organization_id=org.id,
+                plan=SubscriptionPlan.PRO,
+                price=399_000,
+                starts_at=datetime.now(timezone.utc),
+                expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+                is_active=True,
+            )
+        )
+
+        for feature_key, name in [
+            ("auto_invoice", "Tự động tạo hóa đơn hàng tháng"),
+            ("bank_qr", "QR thanh toán ngân hàng"),
+            ("contract_alert", "Cảnh báo hợp đồng sắp hết hạn"),
+        ]:
+            db.add(
+                FeatureEntitlement(
+                    organization_id=org.id,
+                    feature_key=feature_key,
+                    name=name,
+                    source_payment_id=pro_payment.id,
+                    expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+                )
+            )
 
         # Add owner as member
         db.add(OrganizationMember(
@@ -217,8 +283,8 @@ async def seed():
         await db.commit()
         print("✅ Seed complete!")
         print("\n📋 Demo credentials:")
-        print("   Email: demo@nhatro.vn")
-        print("   Password: Demo@123456")
+        print("   Chủ trọ: demo@nhatro.vn / Demo@123456")
+        print("   Admin hệ thống: admin@nhatro.vn / Admin@123456")
         print(f"\n   Organization: Nhà Trọ Hoàng Gia")
         print(f"   Rooms: {len(rooms)}")
         print(f"   Tenants: {len(tenants)}")
