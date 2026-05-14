@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database
-    DATABASE_URL: str = ""
-    DATABASE_SSL_MODE: str = "require"
+    DATABASE_URL: str = "postgresql://postgres:arneca0b18102005Ss@db.nebsjsmspuznpnucvcxj.supabase.co:5432/postgres?sslmode=disable"
+    DATABASE_SSL_MODE: str = "disable"
     DATABASE_USE_NULL_POOL: bool = True
     DATABASE_DISABLE_PREPARED_STATEMENT_CACHE: bool = True
     DATABASE_POOL_SIZE: int = 10
@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     @property
     def cors_origins_list(self) -> List[str]:

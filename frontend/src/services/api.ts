@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 
 class ApiClient {
   private client: AxiosInstance
@@ -71,6 +71,7 @@ class ApiClient {
   login = (data: any) => this.client.post('/auth/login', data)
   me = () => this.client.get('/auth/me')
   logout = () => { this.clearTokens(); window.location.href = '/login' }
+  changePassword = (data: { current_password: string; new_password: string }) => this.client.post('/auth/change-password', data)
 
   // Organization
   getOrganization = () => this.client.get('/organizations/me')
@@ -109,6 +110,8 @@ class ApiClient {
   // Meter Readings
   getMeterReadings = (params?: any) => this.client.get('/meter-readings', { params })
   createMeterReading = (data: any) => this.client.post('/meter-readings', data)
+  updateMeterReading = (id: string, data: any) => this.client.patch(`/meter-readings/${id}`, data)
+
 
   // Invoices
   getInvoices = (params?: any) => this.client.get('/invoices', { params })
@@ -116,11 +119,6 @@ class ApiClient {
   createInvoice = (data: any) => this.client.post('/invoices', data)
   autoGenerateInvoices = (month: number, year: number) => this.client.post('/invoices/auto-generate', null, { params: { billing_month: month, billing_year: year } })
   payInvoice = (id: string, amount: number, method: string) => this.client.post(`/invoices/${id}/pay`, null, { params: { amount, payment_method: method } })
-
-  // Maintenance
-  getMaintenance = (params?: any) => this.client.get('/maintenance', { params })
-  createMaintenance = (data: any) => this.client.post('/maintenance', data)
-  updateMaintenance = (id: string, data: any) => this.client.patch(`/maintenance/${id}`, data)
 
   // SaaS Billing for landlords
   getBillingOverview = () => this.client.get('/billing/overview')

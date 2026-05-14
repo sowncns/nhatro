@@ -1,62 +1,271 @@
 'use client'
 
-import { Calculator, Plus } from 'lucide-react'
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { FormEvent, useEffect, useState } from 'react'
+import { Calculator, Loader2, Pencil, Plus, X } from 'lucide-react'
+import { toast } from 'sonner'
 
-import { consumptionData, currency, meterReadings } from '../_components/demo-data'
+import api from '@/services/api'
 import { Card, PageHeader, PrimaryButton } from '../_components/ui'
 
+type Room = { id: string; room_number: string; boarding_house_id: string; status: string }
+type BoardingHouse = { id: string; name: string }
+type Contract = { id: string; room_id: string; status: string }
+type MeterReading = {
+  id: string
+  room_id: string
+  reading_month: number
+  reading_year: number
+  electricity_previous: number
+  electricity_current: number
+  electricity_usage?: number
+  water_previous: number
+  water_current: number
+  water_usage?: number
+}
+
+const now = new Date()
+
+const emptyForm = {
+  room_id: '',
+  reading_month: String(now.getMonth() + 1),
+  reading_year: String(now.getFullYear()),
+  electricity_current: '',
+  water_current: '',
+}
+
 export default function MeterReadingsPage() {
+  const [boardingHouses, setBoardingHouses] = useState<BoardingHouse[]>([])
+  const [rooms, setRooms] = useState<Room[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [readings, setReadings] = useState<MeterReading[]>([])
+  const [selectedHouseId, setSelectedHouseId] = useState('')
+  const [form, setForm] = useState(emptyForm)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+
+  // Chỉ lấy những phòng đang có khách thuê (occupied hoặc có hợp đồng active)
+  const occupiedRooms = rooms.filter(
+    (r) => r.status === 'occupied' || contracts.some((c) => c.room_id === r.id && c.status === 'active'),
+  )
+
+  const filteredRooms = selectedHouseId
+    ? occupiedRooms.filter((r) => r.boarding_house_id === selectedHouseId)
+    : occupiedRooms
+
+  const roomLabel = (roomId: string) => {
+    const room = rooms.find((item) => item.id === roomId)
+    if (!room) return '-'
+    const house = boardingHouses.find((item) => item.id === room?.boarding_house_id)
+    return `${house?.name || 'Khu trọ'} - Phòng ${room.room_number}`
+  }
+
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const [housesRes, roomsRes, contractsRes, readingsRes] = await Promise.all([
+        api.getBoardingHouses({ size: 100 }),
+        api.getRooms({ size: 100 }),
+        api.getContracts({ size: 100 }),
+        api.getMeterReadings({ size: 100 }),
+      ])
+      setBoardingHouses(housesRes.data.items)
+      setRooms(roomsRes.data.items)
+      setContracts(contractsRes.data.items)
+      setReadings(readingsRes.data.items)
+    } catch {
+      toast.error('Không tải được dữ liệu điện nước')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setIsSaving(true)
+    try {
+      if (editingId) {
+        await api.updateMeterReading(editingId, {
+          electricity_current: Number(form.electricity_current),
+          water_current: Number(form.water_current),
+        })
+        toast.success('Đã cập nhật chỉ số điện nước')
+      } else {
+        await api.createMeterReading({
+          room_id: form.room_id,
+          reading_month: Number(form.reading_month),
+          reading_year: Number(form.reading_year),
+          electricity_current: Number(form.electricity_current),
+          water_current: Number(form.water_current),
+        })
+        toast.success('Đã ghi chỉ số điện nước mới')
+      }
+      setForm(emptyForm)
+      setEditingId(null)
+      await loadData()
+    } catch {
+      toast.error('Không lưu được chỉ số')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const startEdit = (item: MeterReading) => {
+    setEditingId(item.id)
+    setForm({
+      room_id: item.room_id,
+      reading_month: String(item.reading_month),
+      reading_year: String(item.reading_year),
+      electricity_current: String(item.electricity_current),
+      water_current: String(item.water_current),
+    })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setForm(emptyForm)
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Quản lý điện nước"
-        description="Nhập số điện nước mỗi tháng, tự động tính tiền và lưu lịch sử tiêu thụ."
-        action={<PrimaryButton><Plus className="h-4 w-4" /> Ghi chỉ số mới</PrimaryButton>}
+        description="Ghi nhận và điều chỉnh số điện, nước hàng tháng. Chỉ những phòng đang cho thuê mới hiển thị trong danh sách ghi chỉ số."
+        action={
+          <PrimaryButton onClick={cancelEdit}>
+            <Plus className="h-4 w-4" /> Ghi chỉ số mới
+          </PrimaryButton>
+        }
       />
 
-      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card className="p-5">
-          <h2 className="font-semibold">Nhập chỉ số tháng 05/2026</h2>
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            {['Phòng', 'Điện hiện tại', 'Nước hiện tại', 'Ghi chú'].map((label) => (
-              <label key={label} className="text-sm font-medium">
-                {label}
-                <input className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950" />
-              </label>
-            ))}
+      <Card className="p-5">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold">{editingId ? 'Chỉnh sửa chỉ số điện nước' : 'Nhập chỉ số tháng mới'}</h2>
+          {editingId && (
+            <button type="button" onClick={cancelEdit} className="rounded-xl p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <form className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1.2fr_0.5fr_0.6fr_0.8fr_0.8fr_auto]" onSubmit={handleSubmit}>
+          <label className="text-sm font-medium">
+            Khu trọ
+            <select
+              disabled={!!editingId}
+              value={selectedHouseId}
+              onChange={(e) => {
+                setSelectedHouseId(e.target.value)
+                setForm((v) => ({ ...v, room_id: '' }))
+              }}
+              className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950 disabled:opacity-50"
+            >
+              <option value="">Tất cả khu trọ</option>
+              {boardingHouses.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-medium">
+            Phòng (Đang thuê)
+            <select
+              disabled={!!editingId}
+              value={form.room_id}
+              onChange={(e) => setForm({ ...form, room_id: e.target.value })}
+              required className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950 disabled:opacity-50"
+            >
+              <option value="">Chọn phòng</option>
+              {filteredRooms.map((room) => <option key={room.id} value={room.id}>{roomLabel(room.id)}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-medium">
+            Tháng
+            <input
+              disabled={!!editingId} type="number" min="1" max="12" value={form.reading_month}
+              onChange={(e) => setForm({ ...form, reading_month: e.target.value })}
+              className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950 disabled:opacity-50"
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Năm
+            <input
+              disabled={!!editingId} type="number" value={form.reading_year}
+              onChange={(e) => setForm({ ...form, reading_year: e.target.value })}
+              className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950 disabled:opacity-50"
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Số điện mới
+            <input
+              type="number" min="0" step="0.1" value={form.electricity_current}
+              onChange={(e) => setForm({ ...form, electricity_current: e.target.value })}
+              required className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950"
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Số nước mới
+            <input
+              type="number" min="0" step="0.1" value={form.water_current}
+              onChange={(e) => setForm({ ...form, water_current: e.target.value })}
+              required className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950"
+            />
+          </label>
+          <div className="flex items-end gap-2">
+            <button disabled={isSaving} className="mt-7 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:bg-emerald-400">
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}
+              {editingId ? 'Cập nhật' : 'Lưu'}
+            </button>
+            {editingId && (
+              <button type="button" onClick={cancelEdit} className="h-10 rounded-xl border border-slate-200 px-3 text-sm font-semibold dark:border-slate-800">
+                Hủy
+              </button>
+            )}
           </div>
-          <button className="mt-5 inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white">
-            <Calculator className="h-4 w-4" /> Tính tiền tự động
-          </button>
-        </Card>
-
-        <Card className="p-5">
-          <h2 className="font-semibold">Biểu đồ tiêu thụ</h2>
-          <div className="mt-5 h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={consumptionData} margin={{ left: -24 }}>
-                <XAxis dataKey="month" axisLine={false} tickLine={false} />
-                <YAxis axisLine={false} tickLine={false} />
-                <Tooltip />
-                <Bar dataKey="electric" name="Điện" fill="#10b981" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="water" name="Nước" fill="#06b6d4" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </Card>
-      </section>
+        </form>
+      </Card>
 
       <Card className="overflow-hidden">
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          {meterReadings.map((item) => (
-            <div key={item.room} className="grid gap-3 p-4 text-sm sm:grid-cols-4 sm:items-center">
-              <div className="font-semibold">Phòng {item.room}</div>
-              <div>Điện: {item.electric} kWh</div>
-              <div>Nước: {item.water} m3</div>
-              <div className="font-semibold">{currency.format(item.amount)}</div>
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 dark:bg-slate-900">
+              <tr>
+                <th className="px-4 py-3">Phòng</th>
+                <th className="px-4 py-3">Kỳ ghi</th>
+                <th className="px-4 py-3">Điện cũ → mới</th>
+                <th className="px-4 py-3">Nước cũ → mới</th>
+                <th className="px-4 py-3">Tiêu thụ</th>
+                <th className="px-4 py-3 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {isLoading ? (
+                <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={6}>Đang tải chỉ số...</td></tr>
+              ) : readings.length === 0 ? (
+                <tr><td className="px-4 py-8 text-center text-slate-400" colSpan={6}>Chưa có chỉ số nào được ghi.</td></tr>
+              ) : (
+                readings.map((item) => (
+                  <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                    <td className="px-4 py-3 font-semibold">{roomLabel(item.room_id)}</td>
+                    <td className="px-4 py-3">{item.reading_month}/{item.reading_year}</td>
+                    <td className="px-4 py-3 tabular-nums">{item.electricity_previous} → <span className="font-semibold text-emerald-600 dark:text-emerald-400">{item.electricity_current}</span></td>
+                    <td className="px-4 py-3 tabular-nums">{item.water_previous} → <span className="font-semibold text-blue-600 dark:text-blue-400">{item.water_current}</span></td>
+                    <td className="px-4 py-3 tabular-nums">{item.electricity_usage || 0} kWh · {item.water_usage || 0} m³</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => startEdit(item)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                        title="Chỉnh sửa chỉ số"
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </Card>
     </div>

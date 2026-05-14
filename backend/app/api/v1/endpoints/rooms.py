@@ -54,7 +54,19 @@ async def create_room(
     db: AsyncSession = Depends(get_db),
 ):
     repo = BaseRepository(Room, db, ctx.organization_id)
-    room = await repo.create(data.model_dump())
+    room_data = data.model_dump()
+    billing_settings = ctx.organization.settings or {}
+    defaults = {
+        "electricity_price": billing_settings.get("default_electricity_price", 4000),
+        "water_price": billing_settings.get("default_water_price", 15000),
+        "internet_fee": billing_settings.get("default_internet_fee", 0),
+        "parking_fee": billing_settings.get("default_parking_fee", 0),
+    }
+    for key, value in defaults.items():
+        if room_data.get(key) is None:
+            room_data[key] = value
+
+    room = await repo.create(room_data)
     return RoomResponse.model_validate(room)
 
 

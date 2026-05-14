@@ -1,10 +1,10 @@
 'use client'
 
-import { AlertTriangle, Banknote, DoorOpen, FileWarning, Home, Wrench } from 'lucide-react'
+import { Banknote, DoorOpen, FileWarning, Home } from 'lucide-react'
 import { Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 import { Card, PageHeader, StatusBadge } from '../_components/ui'
-import { currency, dueInvoices, maintenanceRequests, monthlyRevenue, occupancyData } from '../_components/demo-data'
+import { currency, dueInvoices, monthlyRevenue, occupancyData } from '../_components/demo-data'
 
 const stats = [
   { name: 'Tổng số phòng', value: '82', note: '+6 phòng tháng này', icon: Home, tone: 'bg-slate-950 text-white dark:bg-white dark:text-slate-950' },
@@ -19,7 +19,7 @@ export default function DashboardOverviewPage() {
     <div className="space-y-6">
       <PageHeader
         title="Dashboard của chủ trọ"
-        description="Chủ trọ theo dõi tự động doanh thu, lấp đầy, công nợ, bảo trì và những chức năng đã mua trong gói SaaS."
+        description="Chủ trọ theo dõi doanh thu, tỉ lệ lấp đầy, công nợ và các chức năng quản lý phòng trọ."
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
@@ -101,7 +101,7 @@ export default function DashboardOverviewPage() {
         </Card>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
+      <section>
         <Card className="overflow-hidden">
           <div className="border-b border-slate-200 p-4 dark:border-slate-800 sm:p-5">
             <h2 className="font-semibold">Hóa đơn sắp đến hạn</h2>
@@ -117,26 +117,6 @@ export default function DashboardOverviewPage() {
                   <div className="font-semibold">{currency.format(invoice.amount)}</div>
                   <StatusBadge status={invoice.status} />
                 </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <div className="border-b border-slate-200 p-4 dark:border-slate-800 sm:p-5">
-            <h2 className="font-semibold">Yêu cầu sửa chữa mới nhất</h2>
-          </div>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {maintenanceRequests.map((request) => (
-              <div key={request.title} className="flex items-center gap-4 p-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300">
-                  {request.priority === 'Cao' ? <AlertTriangle className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{request.room} · {request.title}</div>
-                  <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{request.priority} · {request.time}</div>
-                </div>
-                <StatusBadge status={request.status} />
               </div>
             ))}
           </div>

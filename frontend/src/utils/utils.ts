@@ -29,7 +29,6 @@ export function getRoomStatusColor(status: string): string {
   const map: Record<string, string> = {
     available: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
     occupied: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-    maintenance: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300',
   }
   return map[status] || 'bg-gray-100 text-gray-800'
 }
@@ -45,21 +44,10 @@ export function getInvoiceStatusColor(status: string): string {
   return map[status] || 'bg-gray-100 text-gray-800'
 }
 
-export function getMaintenanceStatusColor(status: string): string {
-  const map: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    in_progress: 'bg-blue-100 text-blue-800',
-    resolved: 'bg-green-100 text-green-800',
-    cancelled: 'bg-gray-100 text-gray-500',
-  }
-  return map[status] || 'bg-gray-100 text-gray-800'
-}
-
 export function getRoomStatusLabel(status: string): string {
   const map: Record<string, string> = {
     available: 'Trống',
     occupied: 'Đang thuê',
-    maintenance: 'Bảo trì',
   }
   return map[status] || status
 }

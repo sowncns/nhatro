@@ -28,12 +28,6 @@ export const dueInvoices = [
   { room: 'C-402', tenant: 'Lê Gia Huy', amount: 5100000, due: '18/05/2026', status: 'Sắp đến hạn' },
 ]
 
-export const maintenanceRequests = [
-  { room: 'A-302', title: 'Máy lạnh không lạnh', priority: 'Cao', status: 'Mới', time: '20 phút trước' },
-  { room: 'B-204', title: 'Rò nước dưới lavabo', priority: 'Trung bình', status: 'Đang xử lý', time: '2 giờ trước' },
-  { room: 'C-105', title: 'Đèn hành lang chập chờn', priority: 'Thấp', status: 'Mới', time: 'Hôm nay' },
-]
-
 export const boardingHouses = [
   { name: 'Sunrise House', address: '12 Nguyễn Hữu Cảnh, Bình Thạnh', rooms: 36, vacant: 4, revenue: 68400000 },
   { name: 'Green Stay Quận 7', address: '88 Nguyễn Thị Thập, Quận 7', rooms: 28, vacant: 2, revenue: 52100000 },
@@ -41,11 +35,11 @@ export const boardingHouses = [
 ]
 
 export const rooms = [
-  { code: 'A-203', price: 3500000, status: 'Đã thuê', tenant: 'Nguyễn Hoàng Minh', paymentDate: '15 hằng tháng' },
-  { code: 'A-305', price: 3300000, status: 'Còn trống', tenant: '-', paymentDate: '-' },
-  { code: 'B-101', price: 3900000, status: 'Quá hạn', tenant: 'Trần Thảo Vy', paymentDate: '10 hằng tháng' },
-  { code: 'C-402', price: 4800000, status: 'Đã thuê', tenant: 'Lê Gia Huy', paymentDate: '18 hằng tháng' },
-  { code: 'C-406', price: 4600000, status: 'Còn trống', tenant: '-', paymentDate: '-' },
+  { house: 'An Nhiên 1', code: '101', price: 3500000, status: 'Đã thuê', tenant: 'Nguyễn Hoàng Minh', paymentDate: '15 hằng tháng' },
+  { house: 'An Nhiên 1', code: '102', price: 3300000, status: 'Còn trống', tenant: '-', paymentDate: '-' },
+  { house: 'An Nhiên 1', code: '202', price: 3900000, status: 'Quá hạn', tenant: 'Trần Thảo Vy', paymentDate: '10 hằng tháng' },
+  { house: 'An Nhiên 2', code: '101', price: 4800000, status: 'Đã thuê', tenant: 'Lê Gia Huy', paymentDate: '18 hằng tháng' },
+  { house: 'An Nhiên 2', code: '202', price: 4600000, status: 'Còn trống', tenant: '-', paymentDate: '-' },
 ]
 
 export const tenants = [
@@ -86,12 +80,6 @@ export const notifications = [
   { title: 'Phòng A-305 đang trống', type: 'Phòng trống', time: 'Hôm qua' },
 ]
 
-export const staff = [
-  { name: 'Nguyễn Hoàng Sơn', role: 'Chủ trọ', permission: 'Toàn quyền khu trọ, thanh toán gói, phân quyền nhân viên' },
-  { name: 'Mai Anh', role: 'Nhân viên quản lý', permission: 'Phòng, khách thuê, hóa đơn, bảo trì' },
-  { name: 'Quốc Bảo', role: 'Kế toán', permission: 'Hóa đơn, báo cáo, công nợ' },
-]
-
 export const featurePlans = [
   {
     name: 'Starter',
@@ -110,8 +98,8 @@ export const featurePlans = [
   {
     name: 'Scale',
     price: 799000,
-    description: 'Cho chuỗi nhà trọ cần phân quyền và báo cáo nâng cao.',
-    features: ['Không giới hạn phòng', 'Nhiều nhân viên', 'Báo cáo doanh thu nâng cao', 'API tích hợp', 'Hỗ trợ ưu tiên'],
+    description: 'Cho chuỗi nhà trọ cần báo cáo nâng cao.',
+    features: ['Không giới hạn phòng', 'Báo cáo doanh thu nâng cao', 'API tích hợp', 'Hỗ trợ ưu tiên'],
     current: false,
   },
 ]

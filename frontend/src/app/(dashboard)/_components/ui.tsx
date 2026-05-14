@@ -28,11 +28,12 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
   )
 }
 
-export function PrimaryButton({ children }: { children: ReactNode }) {
+export function PrimaryButton({ children, onClick, className = '' }: { children: ReactNode; onClick?: () => void; className?: string }) {
   return (
     <button
       type="button"
-      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
+      onClick={onClick}
+      className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 ${className}`}
     >
       {children}
     </button>

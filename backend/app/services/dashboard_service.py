@@ -3,7 +3,7 @@ from datetime import datetime, date
 from typing import List, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
-from app.models.models import Room, RoomStatus, Tenant, Invoice, InvoiceStatus, Contract, MaintenanceRequest, MaintenanceStatus, RoomTenant
+from app.models.models import Room, RoomStatus, Tenant, Invoice, InvoiceStatus, Contract, RoomTenant
 from app.schemas.schemas import DashboardStats
 
 
@@ -26,7 +26,6 @@ class DashboardService:
         total_rooms = sum(room_counts.values())
         occupied = room_counts.get(RoomStatus.OCCUPIED, 0)
         available = room_counts.get(RoomStatus.AVAILABLE, 0)
-        maintenance = room_counts.get(RoomStatus.MAINTENANCE, 0)
         occupancy_rate = (occupied / total_rooms * 100) if total_rooms > 0 else 0
 
         # Tenant count
@@ -58,15 +57,6 @@ class DashboardService:
         )
         outstanding = outstanding_result.scalar_one() or 0
 
-        # Pending maintenance
-        maint_result = await self.db.execute(
-            select(func.count(MaintenanceRequest.id)).where(
-                MaintenanceRequest.organization_id == oid,
-                MaintenanceRequest.status.in_([MaintenanceStatus.PENDING, MaintenanceStatus.IN_PROGRESS]),
-            )
-        )
-        pending_maintenance = maint_result.scalar_one() or 0
-
         # Contracts expiring in next 30 days
         from datetime import timedelta
         expire_date = date.today() + timedelta(days=30)
@@ -83,12 +73,10 @@ class DashboardService:
             total_rooms=total_rooms,
             occupied_rooms=occupied,
             available_rooms=available,
-            maintenance_rooms=maintenance,
             occupancy_rate=round(occupancy_rate, 1),
             total_tenants=total_tenants,
             total_revenue_month=monthly_revenue,
             total_outstanding=outstanding,
-            pending_maintenance=pending_maintenance,
             expiring_contracts=expiring,
         )
 

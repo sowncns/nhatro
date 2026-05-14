@@ -24,10 +24,15 @@ async def update_organization(
     db: AsyncSession = Depends(get_db),
 ):
     from sqlalchemy import update
+    values = data.model_dump(exclude_none=True)
+    if "settings" in values:
+        current_settings = ctx.organization.settings or {}
+        values["settings"] = {**current_settings, **values["settings"]}
+
     await db.execute(
         update(Organization)
         .where(Organization.id == ctx.organization_id)
-        .values(**data.model_dump(exclude_none=True))
+        .values(**values)
     )
     await db.flush()
     await db.refresh(ctx.organization)

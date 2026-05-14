@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { ReactNode, useEffect, useState } from 'react'
 import {
   Bell,
@@ -11,15 +12,17 @@ import {
   FileText,
   Home,
   LayoutDashboard,
+  LogOut,
   Menu,
   Moon,
   Search,
   Settings,
   Sun,
   Users,
-  Wrench,
   Zap,
 } from 'lucide-react'
+
+import { useAuthStore } from '@/store/auth'
 
 const navigation = [
   { name: 'Tổng quan', href: '/dashboard', icon: LayoutDashboard },
@@ -29,7 +32,6 @@ const navigation = [
   { name: 'Hợp đồng', href: '/contracts', icon: ClipboardList },
   { name: 'Điện nước', href: '/meter-readings', icon: Zap },
   { name: 'Hóa đơn', href: '/invoices', icon: FileText },
-  { name: 'Bảo trì', href: '/maintenance', icon: Wrench },
   { name: 'Thông báo', href: '/notifications', icon: Bell },
   { name: 'Gói dịch vụ', href: '/billing', icon: CreditCard },
   { name: 'Cài đặt', href: '/settings', icon: Settings },
@@ -41,6 +43,8 @@ function cx(...classes: Array<string | false | undefined>) {
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const logout = useAuthStore((state) => state.logout)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isDark, setIsDark] = useState(false)
 
@@ -58,6 +62,11 @@ export function AdminShell({ children }: { children: ReactNode }) {
       localStorage.setItem('nhatro-theme', next ? 'dark' : 'light')
       return next
     })
+  }
+
+  const handleLogout = () => {
+    logout()
+    router.push('/login')
   }
 
   const sidebar = (
@@ -162,6 +171,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 </div>
                 <span className="hidden text-sm font-medium sm:inline">Chủ trọ</span>
               </div>
+              <button
+                type="button"
+                className="flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Đăng xuất</span>
+              </button>
             </div>
           </div>
         </header>

@@ -4,7 +4,8 @@ from app.database.session import get_db
 from app.services.auth_service import AuthService
 from app.schemas.schemas import (
     RegisterRequest, LoginRequest, TokenResponse,
-    RefreshTokenRequest, ForgotPasswordRequest, ResetPasswordRequest
+    RefreshTokenRequest, ForgotPasswordRequest, ResetPasswordRequest,
+    ChangePasswordRequest,
 )
 from app.core.deps import get_current_user
 from app.models.models import User
@@ -42,6 +43,17 @@ async def reset_password(data: ResetPasswordRequest, db: AsyncSession = Depends(
     service = AuthService(db)
     await service.reset_password(data.token, data.new_password)
     return {"message": "Password reset successfully"}
+
+
+@router.post("/change-password")
+async def change_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = AuthService(db)
+    await service.change_password(current_user, data.current_password, data.new_password)
+    return {"message": "Password changed successfully"}
 
 
 @router.get("/me")

@@ -159,3 +159,25 @@ class AuthService:
         user.hashed_password = hash_password(new_password)
         await self.db.flush()
         return True
+
+    async def change_password(self, user: User, current_password: str, new_password: str) -> bool:
+        if not verify_password(current_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect",
+            )
+
+        if verify_password(new_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password must be different from current password",
+            )
+
+        user.hashed_password = hash_password(new_password)
+        await self.db.execute(
+            RefreshToken.__table__.update()
+            .where(RefreshToken.user_id == user.id)
+            .values(is_revoked=True)
+        )
+        await self.db.flush()
+        return True

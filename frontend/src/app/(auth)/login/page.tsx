@@ -153,8 +153,8 @@ export default function LoginPage() {
               <span className="text-xl font-bold">42</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-300">Yêu cầu bảo trì</span>
-              <span className="text-xl font-bold">7</span>
+              <span className="text-sm text-slate-300">Công nợ cần thu</span>
+              <span className="text-xl font-bold">18</span>
             </div>
           </div>
         </section>

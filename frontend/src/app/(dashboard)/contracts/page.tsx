@@ -1,56 +1,480 @@
-import { FileUp, Plus } from 'lucide-react'
+'use client'
 
-import { contracts, currency } from '../_components/demo-data'
-import { Card, PageHeader, PrimaryButton, SearchFilterBar, StatusBadge } from '../_components/ui'
+import { FormEvent, useEffect, useState } from 'react'
+import { FileText, Loader2, Plus, Printer, Search, X } from 'lucide-react'
+import { toast } from 'sonner'
+
+import api from '@/services/api'
+import { Card, PageHeader, PrimaryButton, StatusBadge } from '../_components/ui'
+
+type BoardingHouse = { id: string; name: string }
+type Room = { id: string; room_number: string; boarding_house_id: string; base_price: number }
+type Tenant = { id: string; full_name: string; phone: string }
+type Contract = {
+  id: string
+  room_id: string
+  tenant_id: string
+  contract_number: string
+  start_date: string
+  end_date: string
+  monthly_rent: number
+  deposit_amount: number
+  deposit_paid: boolean
+  status: string
+}
+
+const vnd = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })
+const today = new Date().toISOString().substring(0, 10)
+const nextYear = new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().substring(0, 10)
+
+const emptyForm = {
+  boarding_house_id: '',
+  room_id: '',
+  tenant_id: '',
+  start_date: today,
+  end_date: nextYear,
+  monthly_rent: '',
+  deposit_amount: '',
+  payment_due_day: '5',
+}
+
+const cls = 'mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950 disabled:opacity-50'
+
+const STATUS_LABEL: Record<string, string> = {
+  active: 'Hiệu lực',
+  expired: 'Hết hạn',
+  terminated: 'Đã kết thúc',
+}
 
 export default function ContractsPage() {
+  const [boardingHouses, setBoardingHouses] = useState<BoardingHouse[]>([])
+  const [allRooms, setAllRooms] = useState<Room[]>([])
+  const [tenants, setTenants] = useState<Tenant[]>([])
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [form, setForm] = useState(emptyForm)
+  const [tenantSearch, setTenantSearch] = useState('')
+  const [tenantDropOpen, setTenantDropOpen] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+
+  const filteredRooms = allRooms.filter(
+    (r) => !form.boarding_house_id || r.boarding_house_id === form.boarding_house_id,
+  )
+
+  const roomLabel = (roomId: string) => {
+    const room = allRooms.find((r) => r.id === roomId)
+    if (!room) return '-'
+    const house = boardingHouses.find((h) => h.id === room.boarding_house_id)
+    return `${house?.name || 'Khu trọ'} – Phòng ${room.room_number}`
+  }
+
+  const tenantLabel = (tenantId: string) => {
+    const t = tenants.find((t) => t.id === tenantId)
+    return t ? `${t.full_name}` : '-'
+  }
+
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      const [housesRes, roomsRes, tenantsRes, contractsRes] = await Promise.all([
+        api.getBoardingHouses({ size: 100 }),
+        api.getRooms({ size: 100 }),
+        api.getTenants({ size: 100 }),
+        api.getContracts({ size: 100 }),
+      ])
+      setBoardingHouses(housesRes.data.items)
+      setAllRooms(roomsRes.data.items)
+      setTenants(tenantsRes.data.items)
+      setContracts(contractsRes.data.items)
+    } catch {
+      toast.error('Không tải được dữ liệu hợp đồng')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => { loadData() }, [])
+
+  const openForm = () => {
+    setForm(emptyForm)
+    setTenantSearch('')
+    setTenantDropOpen(false)
+    setShowForm(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setIsSaving(true)
+    try {
+      await api.createContract({
+        room_id: form.room_id,
+        tenant_id: form.tenant_id,
+        start_date: form.start_date,
+        end_date: form.end_date,
+        monthly_rent: Number(form.monthly_rent),
+        deposit_amount: Number(form.deposit_amount),
+        payment_due_day: Number(form.payment_due_day),
+      })
+      toast.success('Đã tạo hợp đồng thành công')
+      setForm(emptyForm)
+      setShowForm(false)
+      await loadData()
+    } catch {
+      toast.error('Không tạo được hợp đồng. Kiểm tra lại thông tin.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const printContract = (contract: Contract) => {
+    const room = allRooms.find((r) => r.id === contract.room_id)
+    const house = boardingHouses.find((h) => h.id === room?.boarding_house_id)
+    const tenant = tenants.find((t) => t.id === contract.tenant_id)
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Hợp Đồng Thuê Phòng – ${contract.contract_number}</title>
+        <style>
+          body { font-family: 'Times New Roman', serif; line-height: 1.6; color: #000; padding: 40px; max-width: 800px; margin: auto; }
+          h1, h2, h3 { text-align: center; margin: 5px 0; }
+          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 20px; margin-bottom: 30px; }
+          .section { margin-top: 25px; }
+          .bold { font-weight: bold; }
+          table { width: 100%; margin-top: 60px; border-collapse: collapse; }
+          td { width: 50%; text-align: center; vertical-align: top; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h2>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</h2>
+          <h3>Độc lập – Tự do – Hạnh phúc</h3>
+          <h1 style="margin-top: 30px;">HỢP ĐỒNG THUÊ PHÒNG TRỌ</h1>
+          <p>Số: ${contract.contract_number}</p>
+        </div>
+
+        <div class="section">
+          <p>Hôm nay, ngày ${new Date().getDate()} tháng ${new Date().getMonth() + 1} năm ${new Date().getFullYear()}, tại ${house?.name || 'Khu trọ'}, chúng tôi gồm:</p>
+        </div>
+
+        <div class="section">
+          <h3>BÊN CHO THUÊ (BÊN A):</h3>
+          <p><span class="bold">Đại diện:</span> Ban Quản Lý ${house?.name || 'Khu trọ'}</p>
+          <p><span class="bold">Địa chỉ khu trọ:</span> ${room ? `Phòng ${room.room_number}` : ''} – ${house?.name || ''}</p>
+        </div>
+
+        <div class="section">
+          <h3>BÊN THUÊ (BÊN B):</h3>
+          <p><span class="bold">Ông/Bà:</span> ${tenant?.full_name || '...........................................'}</p>
+          <p><span class="bold">Số điện thoại:</span> ${tenant?.phone || '...........................................'}</p>
+        </div>
+
+        <div class="section">
+          <h3>ĐIỀU 1: NỘI DUNG THỎA THUẬN</h3>
+          <p>Bên A đồng ý cho Bên B thuê phòng trọ số <span class="bold">${room?.room_number || '.....'}</span> thuộc ${house?.name || 'Khu trọ'}.</p>
+          <p>Thời hạn thuê: Từ ngày <span class="bold">${contract.start_date}</span> đến ngày <span class="bold">${contract.end_date}</span>.</p>
+          <p>Giá thuê phòng: <span class="bold">${vnd.format(contract.monthly_rent)} / tháng</span>.</p>
+          <p>Tiền đặt cọc: <span class="bold">${vnd.format(contract.deposit_amount)}</span>.</p>
+        </div>
+
+        <div class="section">
+          <h3>ĐIỀU 2: TRÁCH NHIỆM CÁC BÊN</h3>
+          <p>1. Bên A đảm bảo điều kiện sinh hoạt cơ bản, điện nước đầy đủ cho Bên B.</p>
+          <p>2. Bên B thanh toán tiền thuê đúng hạn định kỳ hàng tháng, giữ gìn tài sản chung và tuân thủ nội quy khu trọ.</p>
+        </div>
+
+        <table>
+          <tr>
+            <td>
+              <h4 style="margin: 0;">BÊN CHO THUÊ (BÊN A)</h4>
+              <p style="font-style: italic;">(Ký & ghi rõ họ tên)</p>
+            </td>
+            <td>
+              <h4 style="margin: 0;">BÊN THUÊ (BÊN B)</h4>
+              <p style="font-style: italic;">(Ký & ghi rõ họ tên)</p>
+            </td>
+          </tr>
+        </table>
+        <script>
+          window.onload = () => { window.print(); }
+        </script>
+      </body>
+      </html>
+    `
+
+    const printWin = window.open('', '_blank')
+    if (printWin) {
+      printWin.document.write(html)
+      printWin.document.close()
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Quản lý hợp đồng"
-        description="Lưu PDF hợp đồng, theo dõi tiền cọc và tự động cảnh báo hợp đồng sắp hết hạn."
-        action={<PrimaryButton><Plus className="h-4 w-4" /> Tạo hợp đồng</PrimaryButton>}
+        description="Tạo và theo dõi hợp đồng thuê phòng, quản lý tiền cọc và cảnh báo hợp đồng sắp hết hạn."
+        action={<PrimaryButton onClick={openForm}><Plus className="h-4 w-4" /> Tạo hợp đồng</PrimaryButton>}
       />
-      <SearchFilterBar filters={['Hiệu lực', 'Sắp hết hạn', 'Đã kết thúc']} />
 
-      <Card className="p-5">
-        <div className="flex flex-col gap-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center dark:border-slate-700 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between sm:text-left">
-          <div>
-            <h2 className="font-semibold">Upload PDF hợp đồng</h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Kéo thả file hoặc chọn từ máy để lưu vào hồ sơ phòng.</p>
+      {/* ── Form tạo hợp đồng ── */}
+      {showForm && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">Tạo hợp đồng mới</h2>
+            <button type="button" onClick={() => setShowForm(false)} className="rounded-xl p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800">
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-semibold shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-            <FileUp className="h-4 w-4" /> Chọn file
-          </button>
-        </div>
-      </Card>
 
+          <form className="mt-5 space-y-5" onSubmit={handleSubmit}>
+            {/* Chọn phòng */}
+            <div>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Chọn phòng</p>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <label className="text-sm font-medium">
+                  Khu trọ <span className="text-red-500">*</span>
+                  <select
+                    value={form.boarding_house_id}
+                    onChange={(e) => setForm({ ...form, boarding_house_id: e.target.value, room_id: '' })}
+                    required className={cls}
+                  >
+                    <option value="">— Chọn khu trọ —</option>
+                    {boardingHouses.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm font-medium">
+                  Phòng <span className="text-red-500">*</span>
+                  <select
+                    value={form.room_id}
+                    onChange={(e) => {
+                      const room = allRooms.find((r) => r.id === e.target.value)
+                      setForm({ ...form, room_id: e.target.value, monthly_rent: room ? String(room.base_price) : form.monthly_rent })
+                    }}
+                    required disabled={!form.boarding_house_id} className={cls}
+                  >
+                    <option value="">— Chọn phòng —</option>
+                    {filteredRooms.map((r) => <option key={r.id} value={r.id}>Phòng {r.room_number}</option>)}
+                  </select>
+                </label>
+                <div className="text-sm font-medium">
+                  Khách thuê <span className="text-red-500">*</span>
+                  <div className="relative mt-2">
+                    {/* Hidden input để bắt required validation */}
+                    <input
+                      type="text" required readOnly tabIndex={-1}
+                      value={form.tenant_id}
+                      className="absolute inset-0 h-0 w-0 opacity-0 pointer-events-none"
+                    />
+                    {/* Search box */}
+                    <div
+                      className="flex h-10 w-full cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm dark:border-slate-800 dark:bg-slate-950"
+                      onClick={() => setTenantDropOpen(true)}
+                    >
+                      <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                      {form.tenant_id ? (
+                        <span className="flex-1 truncate">
+                          {tenants.find(t => t.id === form.tenant_id)?.full_name}
+                          <span className="ml-2 text-slate-400">
+                            {tenants.find(t => t.id === form.tenant_id)?.phone}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="flex-1 text-slate-400">Tìm theo tên hoặc SĐT...</span>
+                      )}
+                      {form.tenant_id && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setForm({ ...form, tenant_id: '' }); setTenantSearch('') }}
+                          className="shrink-0 rounded-full p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Dropdown */}
+                    {tenantDropOpen && (
+                      <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                        {/* Search input bên trong dropdown */}
+                        <div className="flex items-center gap-2 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+                          <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                          <input
+                            autoFocus
+                            type="text"
+                            placeholder="Nhập tên hoặc số điện thoại..."
+                            value={tenantSearch}
+                            onChange={(e) => setTenantSearch(e.target.value)}
+                            className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400"
+                          />
+                          <button type="button" onClick={() => setTenantDropOpen(false)}>
+                            <X className="h-4 w-4 text-slate-400 hover:text-slate-700" />
+                          </button>
+                        </div>
+
+                        {/* Danh sách */}
+                        <ul className="max-h-52 overflow-y-auto py-1">
+                          {tenants
+                            .filter(t =>
+                              !tenantSearch ||
+                              t.full_name.toLowerCase().includes(tenantSearch.toLowerCase()) ||
+                              t.phone.includes(tenantSearch)
+                            )
+                            .map(t => (
+                              <li
+                                key={t.id}
+                                onClick={() => {
+                                  setForm({ ...form, tenant_id: t.id })
+                                  setTenantSearch('')
+                                  setTenantDropOpen(false)
+                                }}
+                                className={`flex cursor-pointer items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                                  form.tenant_id === t.id ? 'bg-emerald-50 font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : ''
+                                }`}
+                              >
+                                <span>{t.full_name}</span>
+                                <span className="text-slate-400">{t.phone}</span>
+                              </li>
+                            ))
+                          }
+                          {tenants.filter(t =>
+                            !tenantSearch ||
+                            t.full_name.toLowerCase().includes(tenantSearch.toLowerCase()) ||
+                            t.phone.includes(tenantSearch)
+                          ).length === 0 && (
+                            <li className="px-4 py-3 text-sm text-slate-400">Không tìm thấy khách thuê nào.</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Click outside to close */}
+                    {tenantDropOpen && (
+                      <div className="fixed inset-0 z-40" onClick={() => setTenantDropOpen(false)} />
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Thời hạn & thanh toán */}
+            <div>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Thời hạn & Thanh toán</p>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <label className="text-sm font-medium">
+                  Ngày bắt đầu <span className="text-red-500">*</span>
+                  <input type="date" value={form.start_date}
+                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+                    required className={cls}
+                  />
+                </label>
+                <label className="text-sm font-medium">
+                  Ngày kết thúc <span className="text-red-500">*</span>
+                  <input type="date" value={form.end_date}
+                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
+                    required className={cls}
+                  />
+                </label>
+                <label className="text-sm font-medium">
+                  Tiền thuê / tháng (VND) <span className="text-red-500">*</span>
+                  <input type="number" min="0" step="100000" value={form.monthly_rent}
+                    onChange={(e) => setForm({ ...form, monthly_rent: e.target.value })}
+                    required placeholder="3000000" className={cls}
+                  />
+                </label>
+                <label className="text-sm font-medium">
+                  Tiền cọc (VND) <span className="text-red-500">*</span>
+                  <input type="number" min="0" step="100000" value={form.deposit_amount}
+                    onChange={(e) => setForm({ ...form, deposit_amount: e.target.value })}
+                    required placeholder="6000000" className={cls}
+                  />
+                </label>
+              </div>
+              <div className="mt-4 max-w-xs">
+                <label className="text-sm font-medium">
+                  Ngày thanh toán hàng tháng (ngày mấy trong tháng)
+                  <input type="number" min="1" max="28" value={form.payment_due_day}
+                    onChange={(e) => setForm({ ...form, payment_due_day: e.target.value })}
+                    className={cls}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                disabled={isSaving}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-6 text-sm font-semibold text-white disabled:bg-slate-400 dark:bg-white dark:text-slate-950"
+              >
+                {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                <FileText className="h-4 w-4" /> Tạo hợp đồng
+              </button>
+              <button
+                type="button" onClick={() => setShowForm(false)}
+                className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 px-5 text-sm font-semibold dark:border-slate-800"
+              >
+                Hủy
+              </button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      {/* ── Bảng hợp đồng ── */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
-            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 dark:bg-slate-900">
+            <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-900">
               <tr>
+                <th className="px-4 py-3">Mã HĐ</th>
                 <th className="px-4 py-3">Phòng</th>
                 <th className="px-4 py-3">Khách thuê</th>
                 <th className="px-4 py-3">Bắt đầu</th>
                 <th className="px-4 py-3">Kết thúc</th>
-                <th className="px-4 py-3">Tiền cọc</th>
+                <th className="px-4 py-3 text-right">Tiền thuê</th>
+                <th className="px-4 py-3 text-right">Tiền cọc</th>
                 <th className="px-4 py-3">Trạng thái</th>
-                <th className="px-4 py-3">Cảnh báo</th>
+                <th className="px-4 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {contracts.map((contract) => (
-                <tr key={contract.room}>
-                  <td className="px-4 py-4 font-semibold">{contract.room}</td>
-                  <td className="px-4 py-4">{contract.tenant}</td>
-                  <td className="px-4 py-4">{contract.start}</td>
-                  <td className="px-4 py-4">{contract.end}</td>
-                  <td className="px-4 py-4">{currency.format(contract.deposit)}</td>
-                  <td className="px-4 py-4"><StatusBadge status={contract.status} /></td>
-                  <td className="px-4 py-4">{contract.warning}</td>
+              {isLoading ? (
+                <tr><td className="px-4 py-6 text-slate-500" colSpan={9}>Đang tải hợp đồng...</td></tr>
+              ) : contracts.length === 0 ? (
+                <tr>
+                  <td className="px-4 py-10 text-center text-slate-400" colSpan={9}>
+                    <FileText className="mx-auto mb-2 h-8 w-8 opacity-30" />
+                    Chưa có hợp đồng nào. Nhấn "Tạo hợp đồng" để bắt đầu.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                contracts.map((contract) => (
+                  <tr key={contract.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                    <td className="px-4 py-3 font-mono text-xs text-slate-500">{contract.contract_number}</td>
+                    <td className="px-4 py-3 font-semibold">{roomLabel(contract.room_id)}</td>
+                    <td className="px-4 py-3">{tenantLabel(contract.tenant_id)}</td>
+                    <td className="px-4 py-3 tabular-nums">{contract.start_date}</td>
+                    <td className="px-4 py-3 tabular-nums">{contract.end_date}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{vnd.format(contract.monthly_rent)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{vnd.format(contract.deposit_amount)}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={STATUS_LABEL[contract.status] ?? contract.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => printContract(contract)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800"
+                        title="In hợp đồng (PDF)"
+                      >
+                        <Printer className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

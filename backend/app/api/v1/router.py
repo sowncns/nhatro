@@ -8,7 +8,6 @@ from app.api.v1.endpoints import (
     contracts,
     dashboard,
     invoices,
-    maintenance,
     meter_readings,
     organizations,
     rooms,
@@ -25,7 +24,6 @@ api_router.include_router(tenants.router, prefix="/tenants", tags=["Tenants"])
 api_router.include_router(contracts.router, prefix="/contracts", tags=["Contracts"])
 api_router.include_router(meter_readings.router, prefix="/meter-readings", tags=["Meter Readings"])
 api_router.include_router(invoices.router, prefix="/invoices", tags=["Invoices"])
-api_router.include_router(maintenance.router, prefix="/maintenance", tags=["Maintenance"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api_router.include_router(billing.router, prefix="/billing", tags=["SaaS Billing"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Platform Admin"])

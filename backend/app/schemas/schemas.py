@@ -1,5 +1,5 @@
 """Pydantic schemas for API request/response validation"""
-from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 from typing import Optional, List, Any, Dict
 from datetime import date, datetime
 from enum import Enum
@@ -49,6 +49,18 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, v):
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
+
+
 # ─────────────────────────────────────────────
 # USER / ORG SCHEMAS
 # ─────────────────────────────────────────────
@@ -77,6 +89,7 @@ class OrganizationResponse(BaseModel):
     bank_name: Optional[str]
     bank_account: Optional[str]
     bank_account_name: Optional[str]
+    settings: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
 
@@ -87,6 +100,7 @@ class OrganizationUpdate(BaseModel):
     bank_name: Optional[str] = None
     bank_account: Optional[str] = None
     bank_account_name: Optional[str] = None
+    settings: Optional[Dict[str, Any]] = None
 
 
 # ─────────────────────────────────────────────
@@ -130,10 +144,10 @@ class RoomCreate(BaseModel):
     area: Optional[float] = None
     max_occupants: int = 2
     base_price: int
-    electricity_price: int = 4000
-    water_price: int = 15000
-    internet_fee: int = 0
-    parking_fee: int = 0
+    electricity_price: Optional[int] = None
+    water_price: Optional[int] = None
+    internet_fee: Optional[int] = None
+    parking_fee: Optional[int] = None
     amenities: List[str] = []
     notes: Optional[str] = None
 
@@ -257,10 +271,18 @@ class MeterReadingCreate(BaseModel):
     room_id: str
     reading_month: int
     reading_year: int
-    electricity_previous: float = 0
+    electricity_previous: Optional[float] = None
     electricity_current: float
-    water_previous: float = 0
+    water_previous: Optional[float] = None
     water_current: float
+    notes: Optional[str] = None
+
+
+class MeterReadingUpdate(BaseModel):
+    electricity_previous: Optional[float] = None
+    electricity_current: Optional[float] = None
+    water_previous: Optional[float] = None
+    water_current: Optional[float] = None
     notes: Optional[str] = None
 
 
@@ -327,36 +349,6 @@ class InvoiceResponse(BaseModel):
 
 
 # ─────────────────────────────────────────────
-# MAINTENANCE SCHEMAS
-# ─────────────────────────────────────────────
-
-class MaintenanceCreate(BaseModel):
-    room_id: str
-    title: str
-    description: str
-    priority: str = "medium"
-
-
-class MaintenanceUpdate(BaseModel):
-    status: Optional[str] = None
-    assigned_to: Optional[str] = None
-    resolution_notes: Optional[str] = None
-
-
-class MaintenanceResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: str
-    room_id: str
-    title: str
-    description: str
-    priority: str
-    status: str
-    images: List[str]
-    resolution_notes: Optional[str]
-    created_at: datetime
-
-
-# ─────────────────────────────────────────────
 # DASHBOARD SCHEMAS
 # ─────────────────────────────────────────────
 
@@ -364,12 +356,10 @@ class DashboardStats(BaseModel):
     total_rooms: int
     occupied_rooms: int
     available_rooms: int
-    maintenance_rooms: int
     occupancy_rate: float
     total_tenants: int
     total_revenue_month: int
     total_outstanding: int
-    pending_maintenance: int
     expiring_contracts: int
 
 

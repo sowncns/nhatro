@@ -9,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy import select
-from app.core.config import settings
+from app.database.session import _database_url_and_connect_args
 from app.core.security import hash_password
 from app.models.models import (
     User, UserRole, Organization, SubscriptionPlan, OrganizationMember, OrgMemberRole,
@@ -23,7 +23,8 @@ import uuid
 
 
 async def seed():
-    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    database_url, connect_args = _database_url_and_connect_args()
+    engine = create_async_engine(database_url, echo=False, connect_args=connect_args)
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with async_session() as db:
