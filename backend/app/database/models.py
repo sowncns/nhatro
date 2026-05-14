@@ -1,0 +1,442 @@
+"""
+SQLAlchemy ORM Models - Multi-tenant SaaS NhaTro
+ALL business tables include organization_id for tenant isolation
+"""
+
+import uuid
+from datetime import datetime
+from typing import Optional
+from sqlalchemy import (
+    Column, String, Integer, Float, Boolean, DateTime, 
+    ForeignKey, Text, Enum, JSON, Date, BigInteger
+)
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship, DeclarativeBase
+from sqlalchemy.sql import func
+import enum
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+def gen_uuid():
+    return str(uuid.uuid4())
+
+
+# ─────────────────────────────────────────────
+# ENUMS
+# ─────────────────────────────────────────────
+
+class UserRole(str, enum.Enum):
+    OWNER = "owner"
+    MANAGER = "manager"
+    TENANT = "tenant"
+
+class OrgMemberRole(str, enum.Enum):
+    OWNER = "owner"
+    MANAGER = "manager"
+    STAFF = "staff"
+
+class SubscriptionPlan(str, enum.Enum):
+    FREE = "free"
+    BASIC = "basic"
+    PRO = "pro"
+
+class RoomStatus(str, enum.Enum):
+    AVAILABLE = "available"
+    OCCUPIED = "occupied"
+    MAINTENANCE = "maintenance"
+
+class ContractStatus(str, enum.Enum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    TERMINATED = "terminated"
+
+class InvoiceStatus(str, enum.Enum):
+    DRAFT = "draft"
+    SENT = "sent"
+    PAID = "paid"
+    OVERDUE = "overdue"
+    CANCELLED = "cancelled"
+
+class PaymentMethod(str, enum.Enum):
+    CASH = "cash"
+    BANK_TRANSFER = "bank_transfer"
+    MOMO = "momo"
+    VNPAY = "vnpay"
+
+class MaintenanceStatus(str, enum.Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    CANCELLED = "cancelled"
+
+class NotificationType(str, enum.Enum):
+    INVOICE_DUE = "invoice_due"
+    CONTRACT_EXPIRY = "contract_expiry"
+    MAINTENANCE_UPDATE = "maintenance_update"
+    PAYMENT_RECEIVED = "payment_received"
+    SYSTEM = "system"
+
+
+# ─────────────────────────────────────────────
+# CORE TABLES
+# ─────────────────────────────────────────────
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    phone = Column(String(20))
+    avatar_url = Column(String(500))
+    is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=False)
+    role = Column(Enum(UserRole), default=UserRole.OWNER)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relations
+    organizations = relationship("Organization", back_populates="owner")
+    org_memberships = relationship("OrganizationMember", back_populates="user")
+    refresh_tokens = relationship("RefreshToken", back_populates="user")
+
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    name = Column(String(255), nullable=False)
+    slug = Column(String(100), unique=True, nullable=False, index=True)
+    owner_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    subscription_plan = Column(Enum(SubscriptionPlan), default=SubscriptionPlan.FREE)
+    logo_url = Column(String(500))
+    address = Column(String(500))
+    phone = Column(String(20))
+    bank_name = Column(String(100))
+    bank_account = Column(String(50))
+    bank_account_name = Column(String(100))
+    settings = Column(JSON, default=dict)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relations
+    owner = relationship("User", back_populates="organizations")
+    members = relationship("OrganizationMember", back_populates="organization")
+    boarding_houses = relationship("BoardingHouse", back_populates="organization")
+    subscriptions = relationship("Subscription", back_populates="organization")
+
+
+class OrganizationMember(Base):
+    __tablename__ = "organization_members"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    role = Column(Enum(OrgMemberRole), default=OrgMemberRole.STAFF)
+    permissions = Column(JSON, default=list)
+    joined_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    organization = relationship("Organization", back_populates="members")
+    user = relationship("User", back_populates="org_memberships")
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    token = Column(String(500), unique=True, nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    is_revoked = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="refresh_tokens")
+
+
+# ─────────────────────────────────────────────
+# BUSINESS TABLES (all have organization_id)
+# ─────────────────────────────────────────────
+
+class BoardingHouse(Base):
+    __tablename__ = "boarding_houses"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    address = Column(String(500), nullable=False)
+    description = Column(Text)
+    images = Column(JSON, default=list)
+    total_floors = Column(Integer, default=1)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organization = relationship("Organization", back_populates="boarding_houses")
+    rooms = relationship("Room", back_populates="boarding_house")
+
+
+class Room(Base):
+    __tablename__ = "rooms"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    boarding_house_id = Column(UUID(as_uuid=False), ForeignKey("boarding_houses.id"), nullable=False)
+    room_number = Column(String(20), nullable=False)
+    floor = Column(Integer, default=1)
+    area = Column(Float)  # m2
+    max_occupants = Column(Integer, default=2)
+    base_price = Column(BigInteger, nullable=False)  # VND
+    electricity_price = Column(BigInteger, default=4000)  # per kWh
+    water_price = Column(BigInteger, default=15000)  # per m3
+    internet_fee = Column(BigInteger, default=0)
+    parking_fee = Column(BigInteger, default=0)
+    status = Column(Enum(RoomStatus), default=RoomStatus.AVAILABLE)
+    amenities = Column(JSON, default=list)
+    images = Column(JSON, default=list)
+    notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organization = relationship("Organization")
+    boarding_house = relationship("BoardingHouse", back_populates="rooms")
+    tenants = relationship("RoomTenant", back_populates="room")
+    contracts = relationship("Contract", back_populates="room")
+    meter_readings = relationship("MeterReading", back_populates="room")
+    invoices = relationship("Invoice", back_populates="room")
+    maintenance_requests = relationship("MaintenanceRequest", back_populates="room")
+
+
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
+    full_name = Column(String(255), nullable=False)
+    phone = Column(String(20), nullable=False)
+    email = Column(String(255))
+    id_card = Column(String(20), unique=True)  # CCCD
+    id_card_images = Column(JSON, default=list)
+    date_of_birth = Column(Date)
+    permanent_address = Column(String(500))
+    avatar_url = Column(String(500))
+    emergency_contact_name = Column(String(255))
+    emergency_contact_phone = Column(String(20))
+    notes = Column(Text)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organization = relationship("Organization")
+    room_tenants = relationship("RoomTenant", back_populates="tenant")
+    contracts = relationship("Contract", back_populates="tenant")
+
+
+class RoomTenant(Base):
+    """Many-to-many: multiple tenants can share a room"""
+    __tablename__ = "room_tenants"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    room_id = Column(UUID(as_uuid=False), ForeignKey("rooms.id"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=False), ForeignKey("tenants.id"), nullable=False)
+    is_primary = Column(Boolean, default=False)  # Người thuê chính
+    move_in_date = Column(Date, nullable=False)
+    move_out_date = Column(Date)
+    is_active = Column(Boolean, default=True)
+
+    room = relationship("Room", back_populates="tenants")
+    tenant = relationship("Tenant", back_populates="room_tenants")
+
+
+class Contract(Base):
+    __tablename__ = "contracts"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    room_id = Column(UUID(as_uuid=False), ForeignKey("rooms.id"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=False), ForeignKey("tenants.id"), nullable=False)
+    contract_number = Column(String(50), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    monthly_rent = Column(BigInteger, nullable=False)
+    deposit_amount = Column(BigInteger, nullable=False)
+    deposit_paid = Column(Boolean, default=False)
+    deposit_returned = Column(Boolean, default=False)
+    payment_due_day = Column(Integer, default=5)  # day of month
+    status = Column(Enum(ContractStatus), default=ContractStatus.ACTIVE)
+    terms = Column(Text)
+    pdf_url = Column(String(500))
+    signed_at = Column(DateTime(timezone=True))
+    terminated_at = Column(DateTime(timezone=True))
+    termination_reason = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organization = relationship("Organization")
+    room = relationship("Room", back_populates="contracts")
+    tenant = relationship("Tenant", back_populates="contracts")
+
+
+class MeterReading(Base):
+    __tablename__ = "meter_readings"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    room_id = Column(UUID(as_uuid=False), ForeignKey("rooms.id"), nullable=False)
+    reading_month = Column(Integer, nullable=False)  # 1-12
+    reading_year = Column(Integer, nullable=False)
+    electricity_previous = Column(Float, default=0)
+    electricity_current = Column(Float, nullable=False)
+    electricity_usage = Column(Float)  # computed
+    water_previous = Column(Float, default=0)
+    water_current = Column(Float, nullable=False)
+    water_usage = Column(Float)  # computed
+    electricity_image = Column(String(500))
+    water_image = Column(String(500))
+    recorded_by = Column(UUID(as_uuid=False), ForeignKey("users.id"))
+    recorded_at = Column(DateTime(timezone=True), server_default=func.now())
+    notes = Column(Text)
+
+    organization = relationship("Organization")
+    room = relationship("Room", back_populates="meter_readings")
+
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    room_id = Column(UUID(as_uuid=False), ForeignKey("rooms.id"), nullable=False)
+    contract_id = Column(UUID(as_uuid=False), ForeignKey("contracts.id"))
+    invoice_number = Column(String(50), nullable=False, unique=True)
+    billing_month = Column(Integer, nullable=False)
+    billing_year = Column(Integer, nullable=False)
+    due_date = Column(Date, nullable=False)
+    rent_amount = Column(BigInteger, nullable=False)
+    electricity_amount = Column(BigInteger, default=0)
+    water_amount = Column(BigInteger, default=0)
+    internet_amount = Column(BigInteger, default=0)
+    parking_amount = Column(BigInteger, default=0)
+    other_amount = Column(BigInteger, default=0)
+    discount_amount = Column(BigInteger, default=0)
+    total_amount = Column(BigInteger, nullable=False)
+    paid_amount = Column(BigInteger, default=0)
+    status = Column(Enum(InvoiceStatus), default=InvoiceStatus.DRAFT)
+    qr_code_url = Column(String(500))
+    pdf_url = Column(String(500))
+    notes = Column(Text)
+    paid_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organization = relationship("Organization")
+    room = relationship("Room", back_populates="invoices")
+    contract = relationship("Contract")
+    items = relationship("InvoiceItem", back_populates="invoice")
+    payments = relationship("Payment", back_populates="invoice")
+
+
+class InvoiceItem(Base):
+    __tablename__ = "invoice_items"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    invoice_id = Column(UUID(as_uuid=False), ForeignKey("invoices.id"), nullable=False)
+    description = Column(String(255), nullable=False)
+    quantity = Column(Float, default=1)
+    unit_price = Column(BigInteger, nullable=False)
+    amount = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    invoice = relationship("Invoice", back_populates="items")
+
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    invoice_id = Column(UUID(as_uuid=False), ForeignKey("invoices.id"), nullable=False)
+    amount = Column(BigInteger, nullable=False)
+    payment_method = Column(Enum(PaymentMethod), default=PaymentMethod.CASH)
+    reference_number = Column(String(100))
+    notes = Column(Text)
+    paid_at = Column(DateTime(timezone=True), server_default=func.now())
+    recorded_by = Column(UUID(as_uuid=False), ForeignKey("users.id"))
+
+    invoice = relationship("Invoice", back_populates="payments")
+
+
+class MaintenanceRequest(Base):
+    __tablename__ = "maintenance_requests"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    room_id = Column(UUID(as_uuid=False), ForeignKey("rooms.id"), nullable=False)
+    tenant_id = Column(UUID(as_uuid=False), ForeignKey("tenants.id"))
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    priority = Column(String(20), default="medium")  # low, medium, high, urgent
+    status = Column(Enum(MaintenanceStatus), default=MaintenanceStatus.PENDING)
+    images = Column(JSON, default=list)
+    assigned_to = Column(UUID(as_uuid=False), ForeignKey("users.id"))
+    resolved_at = Column(DateTime(timezone=True))
+    resolution_notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    organization = relationship("Organization")
+    room = relationship("Room", back_populates="maintenance_requests")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
+    type = Column(Enum(NotificationType), nullable=False)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    data = Column(JSON, default=dict)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    organization = relationship("Organization")
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False)
+    plan = Column(Enum(SubscriptionPlan), nullable=False)
+    price = Column(BigInteger, default=0)
+    starts_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True))
+    is_active = Column(Boolean, default=True)
+    stripe_subscription_id = Column(String(100))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    organization = relationship("Organization", back_populates="subscriptions")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), index=True)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"))
+    action = Column(String(100), nullable=False)
+    resource_type = Column(String(100), nullable=False)
+    resource_id = Column(String(100))
+    old_values = Column(JSON)
+    new_values = Column(JSON)
+    ip_address = Column(String(45))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
