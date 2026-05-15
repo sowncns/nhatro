@@ -255,16 +255,52 @@ class ContractResponse(BaseModel):
     contract_number: str
     start_date: date
     end_date: date
-    monthly_rent: int
-    deposit_amount: int
-    deposit_paid: bool
-    deposit_returned: bool
-    payment_due_day: int
+    monthly_rent: int = 0
+    deposit_amount: int = 0
+    deposit_paid: bool = False
+    deposit_returned: bool = False
+    payment_due_day: int = 5
     status: str
-    member_ids: List[str]
-    vehicle_count: int
-    pdf_url: Optional[str]
+    member_ids: List[str] = []
+    vehicle_count: int = 0
+    pdf_url: Optional[str] = None
+    actual_end_date: Optional[date] = None
+    cancel_reason: Optional[str] = None
+    termination_note: Optional[str] = None
     created_at: datetime
+
+
+class DepositDeduction(BaseModel):
+    amount: int
+    reason: str
+
+
+class ContractTerminateRequest(BaseModel):
+    actual_end_date: date
+    termination_note: Optional[str] = None
+    final_electricity: float
+    final_water: float
+    deposit_deductions: List[DepositDeduction] = Field(default_factory=list)
+    refund_amount: int = 0
+    move_out_reason: Optional[str] = None
+
+
+class DepositTransactionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    amount: int
+    type: str
+    reason: Optional[str]
+    created_at: datetime
+
+
+class ContractLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    action: str
+    old_status: Optional[str]
+    new_status: Optional[str]
+    timestamp: datetime
 
 
 # ─────────────────────────────────────────────
@@ -273,6 +309,10 @@ class ContractResponse(BaseModel):
 
 class MeterReadingCreate(BaseModel):
     room_id: str
+    contract_id: Optional[str] = None
+    reading_type: str = "monthly"
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
     reading_month: int
     reading_year: int
     electricity_previous: Optional[float] = None
@@ -294,6 +334,10 @@ class MeterReadingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
     room_id: str
+    contract_id: Optional[str]
+    reading_type: str
+    period_start: Optional[date]
+    period_end: Optional[date]
     reading_month: int
     reading_year: int
     electricity_previous: float
@@ -302,6 +346,7 @@ class MeterReadingResponse(BaseModel):
     water_previous: float
     water_current: float
     water_usage: Optional[float]
+    is_locked: bool
     electricity_image: Optional[str]
     water_image: Optional[str]
     notes: Optional[str]
@@ -369,6 +414,7 @@ class DashboardStats(BaseModel):
     total_revenue_month: int
     total_outstanding: int
     expiring_contracts: int
+    pending_maintenance: int
 
 
 class PaginatedResponse(BaseModel):
@@ -455,3 +501,56 @@ class PlatformStatsResponse(BaseModel):
     active_subscriptions: int
     paid_revenue: int
     pending_payments: int
+
+# ─────────────────────────────────────────────
+# MAINTENANCE SCHEMAS
+# ─────────────────────────────────────────────
+
+class MaintenanceCreate(BaseModel):
+    room_id: str
+    tenant_id: Optional[str] = None
+    title: str
+    description: str
+    priority: str = "medium"
+
+class MaintenanceUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+    assigned_to: Optional[str] = None
+    resolution_notes: Optional[str] = None
+    resolved_at: Optional[datetime] = None
+
+class MaintenanceResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    room_id: str
+    tenant_id: Optional[str]
+    title: str
+    description: str
+    priority: str
+    status: str
+    images: List[str]
+    assigned_to: Optional[str]
+    resolved_at: Optional[datetime]
+    resolution_notes: Optional[str]
+    created_at: datetime
+
+
+# ─────────────────────────────────────────────
+# TERMINATION SCHEMAS
+# ─────────────────────────────────────────────
+
+class DepositDeduction(BaseModel):
+    reason: str
+    amount: int
+
+class ContractTerminateRequest(BaseModel):
+    actual_end_date: date
+    final_electricity: float
+    final_water: float
+    refund_amount: int
+    move_out_reason: Optional[str] = "Kết thúc hợp đồng"
+    termination_note: Optional[str] = None
+    deposit_deductions: List[DepositDeduction] = []

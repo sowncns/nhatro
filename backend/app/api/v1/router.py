@@ -12,6 +12,7 @@ from app.api.v1.endpoints import (
     organizations,
     rooms,
     tenants,
+    maintenance,
 )
 
 api_router = APIRouter()
@@ -26,4 +27,5 @@ api_router.include_router(meter_readings.router, prefix="/meter-readings", tags=
 api_router.include_router(invoices.router, prefix="/invoices", tags=["Invoices"])
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api_router.include_router(billing.router, prefix="/billing", tags=["SaaS Billing"])
+api_router.include_router(maintenance.router, prefix="/maintenance", tags=["Maintenance"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Platform Admin"])

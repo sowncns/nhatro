@@ -44,11 +44,12 @@ export default function MeterReadingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [viewMode, setViewMode] = useState<'active' | 'history' | 'archived'>('active')
   const { globalSearchQuery } = useSearchStore()
 
   // Chỉ lấy những phòng đang có khách thuê (occupied hoặc có hợp đồng active)
   const occupiedRooms = rooms.filter(
-    (r) => r.status === 'occupied' || contracts.some((c) => c.room_id === r.id && c.status === 'active'),
+    (r) => r.status === 'OCCUPIED' || contracts.some((c) => c.room_id === r.id && c.status === 'ACTIVE'),
   )
 
   const filteredRooms = selectedHouseId
@@ -83,7 +84,7 @@ export default function MeterReadingsPage() {
         api.getBoardingHouses({ size: 100 }),
         api.getRooms({ size: 100 }),
         api.getContracts({ size: 100 }),
-        api.getMeterReadings({ size: 100 }),
+        api.getMeterReadings({ size: 100, mode: viewMode }),
       ])
       setBoardingHouses(housesRes.data.items)
       setRooms(roomsRes.data.items)
@@ -98,7 +99,7 @@ export default function MeterReadingsPage() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [viewMode])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -155,7 +156,29 @@ export default function MeterReadingsPage() {
        
       />
 
-      <Card className="p-5">
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
+        <button
+          onClick={() => setViewMode('active')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'active' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Chỉ số hiện tại
+        </button>
+        <button
+          onClick={() => setViewMode('history')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'history' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Lịch sử chốt sổ
+        </button>
+        <button
+          onClick={() => setViewMode('archived')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'archived' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Lưu trữ
+        </button>
+      </div>
+
+      {viewMode === 'active' && (
+        <Card className="p-5">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">{editingId ? 'Chỉnh sửa chỉ số điện nước' : 'Nhập chỉ số tháng mới'}</h2>
           {editingId && (
@@ -269,6 +292,7 @@ export default function MeterReadingsPage() {
           </div>
         )}
       </Card>
+      )}
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">

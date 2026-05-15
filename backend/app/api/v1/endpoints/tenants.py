@@ -17,24 +17,25 @@ async def list_tenants(
     page: int = Query(1, ge=1),
     size: int = Query(20),
     search: Optional[str] = None,
+    mode: str = Query("active"),
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
-    cache_key = f"tenants:list:{ctx.organization_id}:{page}:{size}:{search}"
+    cache_key = f"tenants:list:{ctx.organization_id}:{page}:{size}:{search}:{mode}"
     cached = await CacheService.get(cache_key)
     if cached:
         return cached
 
     repo = BaseRepository(Tenant, db, ctx.organization_id)
-    filters = [Tenant.is_active == True]
+    filters = []
     if search:
         from sqlalchemy import or_
         filters.append(or_(
             Tenant.full_name.ilike(f"%{search}%"),
             Tenant.phone.ilike(f"%{search}%"),
         ))
-    total = await repo.count(filters)
-    items = await repo.get_all(skip=(page - 1) * size, limit=size, filters=filters)
+    total = await repo.count(filters, mode=mode)
+    items = await repo.get_all(skip=(page - 1) * size, limit=size, filters=filters, mode=mode)
     res = PaginatedResponse(
         items=[TenantResponse.model_validate(t) for t in items],
         total=total, page=page, size=size,

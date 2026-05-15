@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.session import get_db
 from app.core.deps import get_tenant_context, TenantContext
-from app.models.models import Contract
-from app.schemas.schemas import ContractCreate, ContractResponse, PaginatedResponse
+from app.models.models import Contract, MeterReading, ReadingType, Room, RoomStatus, RoomTenant
+from app.schemas.schemas import ContractCreate, ContractResponse, PaginatedResponse, ContractTerminateRequest
 from app.repositories.base import BaseRepository
 from datetime import datetime
 from app.services.cache_service import CacheService
+from app.services.contract_termination_service import ContractTerminationService
 
 router = APIRouter()
 
@@ -17,10 +18,11 @@ async def list_contracts(
     page: int = Query(1, ge=1),
     size: int = Query(20),
     status: str = None,
+    mode: str = Query("active"),
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
-    cache_key = f"contracts:list:{ctx.organization_id}:{page}:{size}:{status}"
+    cache_key = f"contracts:list:{ctx.organization_id}:{page}:{size}:{status}:{mode}"
     cached = await CacheService.get(cache_key)
     if cached:
         return cached
@@ -29,8 +31,8 @@ async def list_contracts(
     filters = []
     if status:
         filters.append(Contract.status == status)
-    total = await repo.count(filters)
-    items = await repo.get_all(skip=(page - 1) * size, limit=size, filters=filters)
+    total = await repo.count(filters, mode=mode)
+    items = await repo.get_all(skip=(page - 1) * size, limit=size, filters=filters, mode=mode)
     res = PaginatedResponse(
         items=[ContractResponse.model_validate(c) for c in items],
         total=total, page=page, size=size,
@@ -59,6 +61,34 @@ async def create_contract(
     contract_data = data.model_dump()
     contract_data["contract_number"] = f"HD{now.year}{now.month:02d}{now.microsecond % 10000:04d}"
     contract = await repo.create(contract_data)
+ 
+    # Create MOVE_IN meter reading
+    prev_mr_result = await db.execute(
+        select(MeterReading).where(MeterReading.room_id == data.room_id).order_by(MeterReading.recorded_at.desc()).limit(1)
+    )
+    prev_mr = prev_mr_result.scalar_one_or_none()
+    
+    move_in_mr = MeterReading(
+        organization_id=ctx.organization_id,
+        room_id=data.room_id,
+        contract_id=contract.id,
+        reading_type=ReadingType.MOVE_IN,
+        period_start=data.start_date,
+        period_end=data.start_date,
+        reading_month=data.start_date.month,
+        reading_year=data.start_date.year,
+        electricity_previous=prev_mr.electricity_current if prev_mr else 0,
+        electricity_current=prev_mr.electricity_current if prev_mr else 0,
+        electricity_usage=0,
+        water_previous=prev_mr.water_current if prev_mr else 0,
+        water_current=prev_mr.water_current if prev_mr else 0,
+        water_usage=0,
+        is_locked=True,
+        notes=f"Chỉ số bàn giao đầu kỳ - HĐ {contract.contract_number}",
+        recorded_by=ctx.user_id
+    )
+    db.add(move_in_mr)
+    await db.flush()
 
     from app.models.models import Room, RoomStatus, RoomTenant
     room_repo = BaseRepository(Room, db, ctx.organization_id)
@@ -100,32 +130,35 @@ async def get_contract(
     return ContractResponse.model_validate(contract)
 
 
-@router.post("/{contract_id}/terminate")
+@router.post("/{contract_id}/terminate", response_model=ContractResponse)
 async def terminate_contract(
     contract_id: str,
-    reason: str = "",
+    data: ContractTerminateRequest,
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
-    from datetime import timezone
-    repo = BaseRepository(Contract, db, ctx.organization_id)
-    contract = await repo.update(contract_id, {
-        "status": "terminated",
-        "terminated_at": datetime.now(timezone.utc),
-        "termination_reason": reason,
-    })
-    if contract:
-        from app.models.models import Room, RoomStatus, RoomTenant
-        room_repo = BaseRepository(Room, db, ctx.organization_id)
-        await room_repo.update(contract.room_id, {"status": RoomStatus.AVAILABLE})
+    service = ContractTerminationService(db, ctx.organization_id, ctx.user.id)
+    contract = await service.terminate_contract(contract_id, data)
+    
+    await CacheService.invalidate(f"contracts:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"dashboard:")
+    
+    return ContractResponse.model_validate(contract)
 
-        tenant_repo = BaseRepository(RoomTenant, db, ctx.organization_id)
-        room_tenants = await tenant_repo.get_all(filters=[RoomTenant.room_id == contract.room_id, RoomTenant.is_active == True])
-        for rt in room_tenants:
-            await tenant_repo.update(str(rt.id), {"is_active": False, "move_out_date": datetime.now(timezone.utc).date()})
 
-        await CacheService.invalidate(f"contracts:list:{ctx.organization_id}")
-        await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
-        await CacheService.invalidate(f"dashboard:")
-
-    return {"message": "Contract terminated"}
+@router.post("/{contract_id}/cancel", response_model=ContractResponse)
+async def cancel_contract(
+    contract_id: str,
+    reason: str = "Chủ trọ hủy hợp đồng",
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    service = ContractTerminationService(db, ctx.organization_id, ctx.user.id)
+    contract = await service.cancel_contract(contract_id, reason)
+    
+    await CacheService.invalidate(f"contracts:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"dashboard:")
+    
+    return ContractResponse.model_validate(contract)

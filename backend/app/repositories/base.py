@@ -20,6 +20,44 @@ class BaseRepository(Generic[ModelType]):
         """Base filter for all queries - ALWAYS applies organization_id"""
         return self.model.organization_id == self.organization_id
 
+    def _apply_view_mode(self, query, mode: str = "active"):
+        """Applies filters based on active/history/archived modes"""
+        # Default: Exclude archived if column exists
+        if hasattr(self.model, 'archived_at'):
+            if mode == "archived":
+                return query.where(self.model.archived_at != None)
+            query = query.where(self.model.archived_at == None)
+        
+        # Entity-specific status filtering
+        from app.database.models import Contract, Invoice, MaintenanceRequest, Tenant, MeterReading, ContractStatus, InvoiceStatus, MaintenanceStatus
+        model_name = self.model.__name__
+        
+        if mode == "active":
+            if model_name == "Contract":
+                query = query.where(Contract.status.in_([ContractStatus.ACTIVE, ContractStatus.DRAFT]))
+            elif model_name == "Invoice":
+                query = query.where(Invoice.status.in_([InvoiceStatus.DRAFT, InvoiceStatus.SENT, InvoiceStatus.OVERDUE]))
+            elif model_name == "MaintenanceRequest":
+                query = query.where(MaintenanceRequest.status.in_([MaintenanceStatus.PENDING, MaintenanceStatus.IN_PROGRESS]))
+            elif model_name == "Tenant":
+                query = query.where(Tenant.is_active == True)
+            elif model_name == "MeterReading":
+                query = query.where(MeterReading.is_locked == False)
+        
+        elif mode == "history":
+            if model_name == "Contract":
+                query = query.where(Contract.status.in_([ContractStatus.ENDED, ContractStatus.CANCELLED, ContractStatus.EXPIRED, ContractStatus.TERMINATED]))
+            elif model_name == "Invoice":
+                query = query.where(Invoice.status.in_([InvoiceStatus.PAID, InvoiceStatus.CANCELLED]))
+            elif model_name == "MaintenanceRequest":
+                query = query.where(MaintenanceRequest.status.in_([MaintenanceStatus.RESOLVED, MaintenanceStatus.CANCELLED]))
+            elif model_name == "Tenant":
+                query = query.where(Tenant.is_active == False)
+            elif model_name == "MeterReading":
+                query = query.where(MeterReading.is_locked == True)
+                
+        return query
+
     async def get(self, id: str) -> Optional[ModelType]:
         result = await self.db.execute(
             select(self.model).where(
@@ -35,8 +73,10 @@ class BaseRepository(Generic[ModelType]):
         limit: int = 50,
         filters: Optional[List] = None,
         order_by=None,
+        mode: str = "active",
     ) -> List[ModelType]:
         query = select(self.model).where(self._tenant_filter())
+        query = self._apply_view_mode(query, mode)
         if filters:
             for f in filters:
                 query = query.where(f)
@@ -46,8 +86,9 @@ class BaseRepository(Generic[ModelType]):
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def count(self, filters: Optional[List] = None) -> int:
+    async def count(self, filters: Optional[List] = None, mode: str = "active") -> int:
         query = select(func.count()).select_from(self.model).where(self._tenant_filter())
+        query = self._apply_view_mode(query, mode)
         if filters:
             for f in filters:
                 query = query.where(f)

@@ -99,6 +99,7 @@ export default function RegisterPage() {
                     onChange={(event) => setFullName(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
                     placeholder="Nguyễn Văn A"
+                    tabIndex={1}
                   />
                 </div>
               </div>
@@ -118,6 +119,7 @@ export default function RegisterPage() {
                     onChange={(event) => setOrganizationName(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
                     placeholder="Nhà trọ Bình An"
+                    tabIndex={2}
                   />
                 </div>
               </div>
@@ -138,6 +140,7 @@ export default function RegisterPage() {
                     onChange={(event) => setEmail(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
                     placeholder="you@example.com"
+                    tabIndex={3}
                   />
                 </div>
               </div>
@@ -157,6 +160,7 @@ export default function RegisterPage() {
                     onChange={(event) => setPhone(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
                     placeholder="0901234567"
+                    tabIndex={4}
                   />
                 </div>
               </div>
@@ -177,6 +181,7 @@ export default function RegisterPage() {
                     onChange={(event) => setPassword(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
                     placeholder="Tối thiểu 8 ký tự"
+                    tabIndex={5}
                   />
                   <button
                     type="button"
@@ -205,6 +210,7 @@ export default function RegisterPage() {
                     onChange={(event) => setConfirmPassword(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
                     placeholder="Nhập lại mật khẩu"
+                    tabIndex={6}
                   />
                 </div>
               </div>
@@ -213,6 +219,7 @@ export default function RegisterPage() {
                 type="submit"
                 disabled={isSubmitting}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400 sm:col-span-2"
+                tabIndex={7}
               >
                 {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 Tạo tài khoản

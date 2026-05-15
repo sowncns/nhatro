@@ -5,13 +5,15 @@ import { KeyRound, Loader2, Save, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 
 import api from '@/services/api'
+import { getBanks, Bank } from '@/lib/banks'
+import { Combobox } from '../_components/combobox'
 import { Card, PageHeader } from '../_components/ui'
 
 const priceFields = [
   { key: 'default_electricity_price', label: 'Giá điện / kWh', placeholder: 'Ví dụ: 4000' },
   { key: 'default_water_price', label: 'Giá nước / m3', placeholder: 'Ví dụ: 15000' },
   { key: 'default_internet_fee', label: 'Phí internet', placeholder: 'Ví dụ: 100000' },
-  { key: 'default_parking_fee', label: 'Phí gửi xe', placeholder: 'Ví dụ: 150000' },
+  { key: 'default_parking_fee', label: 'Phí gửi xe/chiếc', placeholder: 'Ví dụ: 150000' },
   { key: 'default_service_fee', label: 'Phí dịch vụ khác', placeholder: 'Ví dụ: 50000' },
 ]
 
@@ -27,6 +29,7 @@ const emptyProfile = {
 export default function SettingsPage() {
   const [profile, setProfile] = useState(emptyProfile)
   const [prices, setPrices] = useState<Record<string, string>>({})
+  const [banks, setBanks] = useState<Bank[]>([])
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -61,8 +64,14 @@ export default function SettingsPage() {
     }
   }
 
+  const loadBanks = async () => {
+    const data = await getBanks()
+    setBanks(data)
+  }
+
   useEffect(() => {
     loadSettings()
+    loadBanks()
   }, [])
 
   const handleSaveSettings = async (event: FormEvent<HTMLFormElement>) => {
@@ -132,7 +141,34 @@ export default function SettingsPage() {
                 ['name', 'Tên nhà trọ / chủ trọ'],
                 ['phone', 'Số điện thoại'],
                 ['address', 'Địa chỉ'],
-                ['bank_name', 'Ngân hàng'],
+              ].map(([key, label]) => (
+                <label key={key} className="text-sm font-medium">
+                  {label}
+                  <input
+                    value={profile[key as keyof typeof profile]}
+                    onChange={(event) => setProfile({ ...profile, [key]: event.target.value })}
+                    className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950"
+                  />
+                </label>
+              ))}
+
+              <div className="text-sm font-medium">
+                Ngân hàng
+                <Combobox
+                  className="mt-2"
+                  placeholder="Chọn ngân hàng..."
+                  options={banks.map(bank => ({
+                    value: bank.shortName,
+                    label: bank.shortName,
+                    description: bank.name,
+                    image: bank.logo
+                  }))}
+                  value={profile.bank_name}
+                  onChange={(val) => setProfile({ ...profile, bank_name: val })}
+                />
+              </div>
+
+              {[
                 ['bank_account', 'Số tài khoản'],
                 ['bank_account_name', 'Tên chủ tài khoản'],
               ].map(([key, label]) => (
@@ -146,10 +182,10 @@ export default function SettingsPage() {
                 </label>
               ))}
             </div>
-            <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center dark:border-slate-700 dark:bg-slate-950">
+            {/* <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center dark:border-slate-700 dark:bg-slate-950">
               <Upload className="mx-auto h-6 w-6 text-slate-400" />
               <div className="mt-2 text-sm font-semibold">Upload logo nhà trọ</div>
-            </div>
+            </div> */}
           </Card>
 
           <Card className="p-5">

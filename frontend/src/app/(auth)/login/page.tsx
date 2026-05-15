@@ -78,6 +78,7 @@ export default function LoginPage() {
                     onChange={(event) => setEmail(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
                     placeholder="you@example.com"
+                    tabIndex={1}
                   />
                 </div>
               </div>
@@ -103,6 +104,7 @@ export default function LoginPage() {
                     onChange={(event) => setPassword(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
                     placeholder="Nhập mật khẩu"
+                    tabIndex={2}
                   />
                   <button
                     type="button"
@@ -118,6 +120,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
+                tabIndex={3}
                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400"
               >
                 {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}

@@ -28,7 +28,7 @@ type Contract = {
   vehicle_count: number
 }
 
-const vnd = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })
+const vnd = { format: (n: number) => (n ?? 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') + 'đ' }
 const today = new Date().toISOString().substring(0, 10)
 const nextYear = new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().substring(0, 10)
 
@@ -49,9 +49,21 @@ const cls =
   'mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950'
 
 const STATUS_LABEL: Record<string, string> = {
-  active: 'Hiệu lực',
-  expired: 'Hết hạn',
-  terminated: 'Đã kết thúc',
+  ACTIVE: 'Hiệu lực',
+  EXPIRED: 'Hết hạn',
+  TERMINATED: 'Đã kết thúc',
+  CANCELLED: 'Đã hủy',
+  DRAFT: 'Bản nháp',
+}
+
+interface TerminateForm {
+  actual_end_date: string
+  final_electricity: string
+  final_water: string
+  refund_amount: string
+  move_out_reason: string
+  termination_note: string
+  deposit_deductions: { reason: string; amount: string }[]
 }
 
 
@@ -68,6 +80,20 @@ export default function ContractsPage() {
   const [showForm, setShowForm] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [viewMode, setViewMode] = useState<'active' | 'history' | 'archived'>('active')
+
+  // Termination Modal State
+  const [showTerminateModal, setShowTerminateModal] = useState(false)
+  const [terminatingContract, setTerminatingContract] = useState<Contract | null>(null)
+  const [terminateForm, setTerminateForm] = useState<TerminateForm>({
+    actual_end_date: today,
+    final_electricity: '',
+    final_water: '',
+    refund_amount: '',
+    move_out_reason: 'Hết hạn hợp đồng',
+    termination_note: '',
+    deposit_deductions: []
+  })
   const { globalSearchQuery } = useSearchStore()
 
   const roomLabel = (roomId: string) => {
@@ -104,7 +130,7 @@ export default function ContractsPage() {
 
   // Ràng buộc: Chỉ lấy những phòng chưa có hợp đồng đang active
   const availableRoomsForContract = filteredRooms.filter((r) => {
-    const hasActiveContract = contracts.some((c) => c.room_id === r.id && c.status === 'active')
+    const hasActiveContract = contracts.some((c) => c.room_id === r.id && c.status === 'ACTIVE')
     return !hasActiveContract
   })
 
@@ -115,7 +141,7 @@ export default function ContractsPage() {
         api.getBoardingHouses({ size: 100 }),
         api.getRooms({ size: 100 }),
         api.getTenants({ size: 100 }),
-        api.getContracts({ size: 100 }),
+        api.getContracts({ size: 100, mode: viewMode }),
       ])
       setBoardingHouses(housesRes.data.items)
       setAllRooms(roomsRes.data.items)
@@ -130,7 +156,7 @@ export default function ContractsPage() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [viewMode])
 
   const openForm = () => {
     setForm(emptyForm)
@@ -169,17 +195,60 @@ export default function ContractsPage() {
     }
   }
 
-  const handleTerminate = async (contract: Contract) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn hủy / chấm dứt hợp đồng ${contract.contract_number}?`)) {
-      return
-    }
+  const handleTerminateClick = (contract: Contract) => {
+    setTerminatingContract(contract)
+    setTerminateForm({
+      ...terminateForm,
+      actual_end_date: today,
+      refund_amount: String(contract.deposit_amount)
+    })
+    setShowTerminateModal(true)
+  }
+
+  const submitTermination = async () => {
+    if (!terminatingContract) return
+    setIsSaving(true)
     try {
-      await api.terminateContract(contract.id, 'Chủ trọ hủy hợp đồng')
-      toast.success('Đã hủy / chấm dứt hợp đồng thành công')
+      await api.terminateContract(terminatingContract.id, {
+        actual_end_date: terminateForm.actual_end_date,
+        final_electricity: Number(terminateForm.final_electricity),
+        final_water: Number(terminateForm.final_water),
+        refund_amount: Number(terminateForm.refund_amount),
+        move_out_reason: terminateForm.move_out_reason,
+        termination_note: terminateForm.termination_note,
+        deposit_deductions: terminateForm.deposit_deductions.map(d => ({
+          reason: d.reason,
+          amount: Number(d.amount)
+        }))
+      })
+      toast.success('Đã thanh lý hợp đồng thành công')
+      setShowTerminateModal(false)
       await loadData()
-    } catch {
-      toast.error('Không hủy được hợp đồng')
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Không thể thanh lý hợp đồng')
+    } finally {
+      setIsSaving(false)
     }
+  }
+
+  const addDeduction = () => {
+    setTerminateForm({
+      ...terminateForm,
+      deposit_deductions: [...terminateForm.deposit_deductions, { reason: '', amount: '0' }]
+    })
+  }
+
+  const updateDeduction = (index: number, field: 'reason' | 'amount', value: string) => {
+    const newDeductions = [...terminateForm.deposit_deductions]
+    newDeductions[index][field] = value
+    setTerminateForm({ ...terminateForm, deposit_deductions: newDeductions })
+  }
+
+  const removeDeduction = (index: number) => {
+    setTerminateForm({
+      ...terminateForm,
+      deposit_deductions: terminateForm.deposit_deductions.filter((_, i) => i !== index)
+    })
   }
 
   const printContract = (contract: Contract) => {
@@ -523,7 +592,6 @@ export default function ContractsPage() {
                     type="number" value={form.deposit_amount}
                     onChange={(e) => setForm({ ...form, deposit_amount: e.target.value })}
                     required placeholder="0" className={cls}
-                    defaultValue={0}
                   />
                 </label>
               </div>
@@ -578,7 +646,26 @@ export default function ContractsPage() {
         </Card>
       )}
 
-      {/* ── Bảng hợp đồng ── */}
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
+        <button
+          onClick={() => setViewMode('active')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'active' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Đang hoạt động
+        </button>
+        <button
+          onClick={() => setViewMode('history')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'history' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Đã kết thúc / Hủy
+        </button>
+        <button
+          onClick={() => setViewMode('archived')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'archived' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Lưu trữ
+        </button>
+      </div>
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
@@ -644,11 +731,11 @@ export default function ContractsPage() {
                         >
                           <Printer className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
                         </button>
-                        {contract.status === 'active' && (
+                        {contract.status === 'ACTIVE' && (
                           <button
-                            onClick={() => handleTerminate(contract)}
+                            onClick={() => handleTerminateClick(contract)}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-red-200 hover:bg-red-50 dark:border-red-500/20 dark:hover:bg-red-500/10"
-                            title="Hủy / Chấm dứt hợp đồng"
+                            title="Thanh lý / Kết thúc hợp đồng"
                           >
                             <Trash2 className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />
                           </button>
@@ -662,6 +749,158 @@ export default function ContractsPage() {
           </table>
         </div>
       </Card>
+
+      {/* ── Modal Thanh lý hợp đồng ── */}
+      {showTerminateModal && terminatingContract && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4 dark:border-slate-800">
+              <div>
+                <h2 className="text-xl font-bold text-red-600">Thanh lý hợp đồng</h2>
+                <p className="text-sm text-slate-500">Phòng {roomLabel(terminatingContract.room_id)} - {terminatingContract.contract_number}</p>
+              </div>
+              <button onClick={() => setShowTerminateModal(false)} className="rounded-xl p-2 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-6">
+              {/* Chỉ số cuối */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Chỉ số điện cuối (kWh)</label>
+                  <input
+                    type="number"
+                    value={terminateForm.final_electricity}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, final_electricity: e.target.value })}
+                    className={cls}
+                    placeholder="VD: 1250"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Chỉ số nước cuối (m³)</label>
+                  <input
+                    type="number"
+                    value={terminateForm.final_water}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, final_water: e.target.value })}
+                    className={cls}
+                    placeholder="VD: 450"
+                  />
+                </div>
+              </div>
+
+              {/* Ngày rời đi & Lý do */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Ngày rời đi thực tế</label>
+                  <DateInput
+                    value={terminateForm.actual_end_date}
+                    onChange={(iso) => setTerminateForm({ ...terminateForm, actual_end_date: iso })}
+                    className={cls}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Lý do rời đi</label>
+                  <input
+                    type="text"
+                    value={terminateForm.move_out_reason}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, move_out_reason: e.target.value })}
+                    className={cls}
+                  />
+                </div>
+              </div>
+
+              {/* Tiền cọc & Khấu trừ */}
+              <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-950/50">
+                <div className="flex items-center justify-between mb-4">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Khấu trừ tiền cọc & Phí phát sinh</label>
+                  <button
+                    type="button"
+                    onClick={addDeduction}
+                    className="text-xs font-bold text-emerald-600 hover:underline"
+                  >
+                    + Thêm khoản trừ
+                  </button>
+                </div>
+                
+                <div className="space-y-3">
+                  {terminateForm.deposit_deductions.map((d, index) => (
+                    <div key={index} className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Lý do trừ (VD: Hỏng vòi nước)"
+                        value={d.reason}
+                        onChange={(e) => updateDeduction(index, 'reason', e.target.value)}
+                        className="h-9 flex-1 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none dark:border-slate-800 dark:bg-slate-900"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Số tiền"
+                        value={d.amount}
+                        onChange={(e) => updateDeduction(index, 'amount', e.target.value)}
+                        className="h-9 w-28 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none dark:border-slate-800 dark:bg-slate-900"
+                      />
+                      <button
+                        onClick={() => removeDeduction(index)}
+                        className="flex h-9 w-9 items-center justify-center text-red-500 hover:bg-red-50 rounded-xl"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                  {terminateForm.deposit_deductions.length === 0 && (
+                    <p className="text-xs text-slate-400 text-center py-2">Không có khoản khấu trừ nào</p>
+                  )}
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Số tiền cọc thực trả lại</span>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={terminateForm.refund_amount}
+                        onChange={(e) => setTerminateForm({ ...terminateForm, refund_amount: e.target.value })}
+                        className="h-10 w-40 rounded-xl border border-emerald-200 bg-white pl-3 pr-12 text-right font-bold text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-emerald-800 dark:bg-slate-900"
+                      />
+                      <span className="absolute right-3 top-2.5 text-xs text-slate-400">VND</span>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-[10px] text-right text-slate-400">Tiền cọc gốc: {vnd.format(terminatingContract.deposit_amount)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Ghi chú thanh lý</label>
+                <textarea
+                  rows={2}
+                  value={terminateForm.termination_note}
+                  onChange={(e) => setTerminateForm({ ...terminateForm, termination_note: e.target.value })}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-emerald-500 dark:border-slate-800 dark:bg-slate-950"
+                  placeholder="Ghi chú thêm nếu cần..."
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-3">
+              <button
+                onClick={submitTermination}
+                disabled={isSaving || !terminateForm.final_electricity || !terminateForm.final_water}
+                className="flex-1 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-600 font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-700 disabled:bg-slate-300 dark:disabled:bg-slate-800"
+              >
+                {isSaving && <Loader2 className="h-5 w-5 animate-spin" />}
+                Xác nhận thanh lý & Trả phòng
+              </button>
+              <button
+                onClick={() => setShowTerminateModal(false)}
+                className="inline-flex h-12 px-6 items-center justify-center rounded-xl border border-slate-200 font-bold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Hủy
+              </button>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }

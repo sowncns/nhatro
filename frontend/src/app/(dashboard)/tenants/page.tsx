@@ -42,6 +42,7 @@ export default function TenantsPage() {
   const [showForm, setShowForm] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [viewMode, setViewMode] = useState<'active' | 'history' | 'archived'>('active')
   const { globalSearchQuery } = useSearchStore()
 
   const filteredTenants = tenants.filter(t => {
@@ -55,7 +56,7 @@ export default function TenantsPage() {
   const loadTenants = async () => {
     setIsLoading(true)
     try {
-      const { data } = await api.getTenants({ size: 100 })
+      const { data } = await api.getTenants({ size: 100, mode: viewMode })
       setTenants(data.items)
     } catch {
       toast.error('Không tải được danh sách khách thuê')
@@ -64,7 +65,7 @@ export default function TenantsPage() {
     }
   }
 
-  useEffect(() => { loadTenants() }, [])
+  useEffect(() => { loadTenants() }, [viewMode])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -264,6 +265,27 @@ export default function TenantsPage() {
           </form>
         </Card>
       )}
+
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
+        <button
+          onClick={() => setViewMode('active')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'active' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Khách đang ở
+        </button>
+        <button
+          onClick={() => setViewMode('history')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'history' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Khách đã dời đi
+        </button>
+        <button
+          onClick={() => setViewMode('archived')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'archived' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Lưu trữ
+        </button>
+      </div>
 
       {/* ── Danh sách khách thuê ── */}
       <div className="grid gap-4 xl:grid-cols-3">

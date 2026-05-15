@@ -3,7 +3,7 @@ from datetime import datetime, date
 from typing import List, Dict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
-from app.models.models import Room, RoomStatus, Tenant, Invoice, InvoiceStatus, Contract, RoomTenant
+from app.models.models import Room, RoomStatus, Tenant, Invoice, InvoiceStatus, Contract, RoomTenant, MaintenanceRequest, MaintenanceStatus
 from app.schemas.schemas import DashboardStats
 
 
@@ -19,7 +19,10 @@ class DashboardService:
         # Room stats
         rooms = await self.db.execute(
             select(Room.status, func.count(Room.id))
-            .where(Room.organization_id == oid)
+            .where(
+                Room.organization_id == oid,
+                # Room không có archived_at hiện tại nhưng có thể thêm sau này nếu cần
+            )
             .group_by(Room.status)
         )
         room_counts = {row[0]: row[1] for row in rooms}
@@ -33,6 +36,7 @@ class DashboardService:
             select(func.count(Tenant.id)).where(
                 Tenant.organization_id == oid,
                 Tenant.is_active == True,
+                Tenant.archived_at == None
             )
         )
         total_tenants = tenant_result.scalar_one() or 0
@@ -43,7 +47,8 @@ class DashboardService:
                 Invoice.organization_id == oid,
                 Invoice.billing_month == now.month,
                 Invoice.billing_year == now.year,
-                Invoice.status == InvoiceStatus.PAID,
+                Invoice.status == 'PAID',
+                Invoice.archived_at == None
             )
         )
         monthly_revenue = revenue_result.scalar_one() or 0
@@ -52,7 +57,8 @@ class DashboardService:
         outstanding_result = await self.db.execute(
             select(func.sum(Invoice.total_amount - Invoice.paid_amount)).where(
                 Invoice.organization_id == oid,
-                Invoice.status.in_([InvoiceStatus.SENT, InvoiceStatus.OVERDUE]),
+                Invoice.status.in_(['SENT', 'OVERDUE']),
+                Invoice.archived_at == None
             )
         )
         outstanding = outstanding_result.scalar_one() or 0
@@ -63,11 +69,22 @@ class DashboardService:
         expiring_result = await self.db.execute(
             select(func.count(Contract.id)).where(
                 Contract.organization_id == oid,
-                Contract.status == "active",
+                Contract.status == "ACTIVE",
                 Contract.end_date <= expire_date,
+                Contract.archived_at == None
             )
         )
         expiring = expiring_result.scalar_one() or 0
+
+        # Maintenance stats
+        maintenance_result = await self.db.execute(
+            select(func.count(MaintenanceRequest.id)).where(
+                MaintenanceRequest.organization_id == oid,
+                MaintenanceRequest.status.in_(['PENDING', 'IN_PROGRESS']),
+                MaintenanceRequest.archived_at == None
+            )
+        )
+        pending_maintenance = maintenance_result.scalar_one() or 0
 
         return DashboardStats(
             total_rooms=total_rooms,
@@ -78,6 +95,7 @@ class DashboardService:
             total_revenue_month=monthly_revenue,
             total_outstanding=outstanding,
             expiring_contracts=expiring,
+            pending_maintenance=pending_maintenance,
         )
 
     async def get_monthly_revenue(self, year: int) -> List[Dict]:

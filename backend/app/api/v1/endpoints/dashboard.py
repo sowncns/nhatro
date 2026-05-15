@@ -76,6 +76,7 @@ async def global_search(
     tenant_stmt = select(Tenant).filter(
         Tenant.organization_id == ctx.organization_id,
         Tenant.is_active == True,
+        Tenant.archived_at == None,
         or_(Tenant.full_name.ilike(f"%{q}%"), Tenant.phone.ilike(f"%{q}%"))
     ).limit(5)
     tenants = (await db.execute(tenant_stmt)).scalars().all()
@@ -106,7 +107,8 @@ async def global_search(
     # Search Invoices
     invoice_stmt = select(Invoice).filter(
         Invoice.organization_id == ctx.organization_id,
-        Invoice.invoice_number.ilike(f"%{q}%")
+        Invoice.invoice_number.ilike(f"%{q}%"),
+        Invoice.archived_at == None
     ).limit(5)
     invoices = (await db.execute(invoice_stmt)).scalars().all()
     for i in invoices:

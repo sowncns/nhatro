@@ -230,7 +230,7 @@ export default function DashboardOverviewPage() {
                   <div className="text-right">
                     <div className="font-semibold tabular-nums text-sm">{vnd.format(inv.total_amount)}</div>
                     <div className="mt-1">
-                      <StatusBadge status={inv.status === 'paid' ? 'Đã thanh toán' : inv.status === 'overdue' ? 'Quá hạn' : 'Chưa thanh toán'} />
+                      <StatusBadge status={inv.status === 'PAID' ? 'Đã thanh toán' : inv.status === 'OVERDUE' ? 'Quá hạn' : 'Chưa thanh toán'} />
                     </div>
                   </div>
                 </div>

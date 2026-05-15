@@ -1,15 +1,13 @@
-// Format VND currency
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
-    maximumFractionDigits: 0,
-  }).format(amount)
+// Format VND currency with comma separator: 5,000,000đ
+export function formatCurrency(amount: number | null | undefined): string {
+  const num = amount ?? 0
+  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') + 'đ'
 }
 
-// Format number with commas
-export function formatNumber(num: number): string {
-  return new Intl.NumberFormat('vi-VN').format(num)
+// Format number with commas: 5,000,000
+export function formatNumber(num: number | null | undefined): string {
+  const n = num ?? 0
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
 // Format date to dd/MM/yyyy (always zero-padded)

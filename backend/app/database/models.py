@@ -57,33 +57,47 @@ class SaaSPaymentType(str, enum.Enum):
     MODULE = "module"
 
 class RoomStatus(str, enum.Enum):
-    AVAILABLE = "available"
-    OCCUPIED = "occupied"
-    MAINTENANCE = "maintenance"
+    AVAILABLE = "AVAILABLE"
+    OCCUPIED = "OCCUPIED"
+    MAINTENANCE = "MAINTENANCE"
 
 class ContractStatus(str, enum.Enum):
-    ACTIVE = "active"
-    EXPIRED = "expired"
-    TERMINATED = "terminated"
+    DRAFT = "DRAFT"
+    ACTIVE = "ACTIVE"
+    ENDED = "ENDED"
+    CANCELLED = "CANCELLED"
+    EXPIRED = "EXPIRED"
+    TERMINATED = "TERMINATED"
+
+class DepositAction(str, enum.Enum):
+    REFUND = "REFUND"
+    DEDUCTION = "DEDUCTION"
+    TRANSFER = "TRANSFER"
 
 class InvoiceStatus(str, enum.Enum):
-    DRAFT = "draft"
-    SENT = "sent"
-    PAID = "paid"
-    OVERDUE = "overdue"
-    CANCELLED = "cancelled"
+    DRAFT = "DRAFT"
+    SENT = "SENT"
+    PAID = "PAID"
+    OVERDUE = "OVERDUE"
+    CANCELLED = "CANCELLED"
 
 class PaymentMethod(str, enum.Enum):
-    CASH = "cash"
-    BANK_TRANSFER = "bank_transfer"
-    MOMO = "momo"
-    VNPAY = "vnpay"
+    CASH = "CASH"
+    BANK_TRANSFER = "BANK_TRANSFER"
+    MOMO = "MOMO"
+    VNPAY = "VNPAY"
 
 class MaintenanceStatus(str, enum.Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    RESOLVED = "resolved"
-    CANCELLED = "cancelled"
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    RESOLVED = "RESOLVED"
+    CANCELLED = "CANCELLED"
+
+class ReadingType(str, enum.Enum):
+    MOVE_IN = "MOVE_IN"
+    MONTHLY = "MONTHLY"
+    MOVE_OUT = "MOVE_OUT"
+    FINAL = "FINAL"
 
 class NotificationType(str, enum.Enum):
     INVOICE_DUE = "invoice_due"
@@ -247,6 +261,7 @@ class Tenant(Base):
     emergency_contact_phone = Column(String(20))
     notes = Column(Text)
     is_active = Column(Boolean, default=True)
+    archived_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -270,6 +285,7 @@ class RoomTenant(Base):
     is_primary = Column(Boolean, default=False)  # Người thuê chính
     move_in_date = Column(Date, nullable=False)
     move_out_date = Column(Date)
+    move_out_reason = Column(String(500))
     is_active = Column(Boolean, default=True)
 
     room = relationship("Room", back_populates="tenants")
@@ -301,7 +317,9 @@ class Contract(Base):
     pdf_url = Column(String(500))
     signed_at = Column(DateTime(timezone=True))
     terminated_at = Column(DateTime(timezone=True))
-    termination_reason = Column(Text)
+    actual_end_date = Column(Date)
+    cancel_reason = Column(String(500))
+    termination_note = Column(Text)
     member_ids = Column(JSON, default=list)  # Lưu danh sách ID những người ở cùng (co-tenants)
     vehicle_count = Column(Integer, default=0) # Số lượng xe gửi
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -310,6 +328,9 @@ class Contract(Base):
     organization = relationship("Organization")
     room = relationship("Room", back_populates="contracts")
     tenant = relationship("Tenant", back_populates="contracts")
+    deposit_transactions = relationship("DepositTransaction", back_populates="contract", cascade="all, delete-orphan")
+    contract_logs = relationship("ContractLog", back_populates="contract", cascade="all, delete-orphan")
+    archived_at = Column(DateTime(timezone=True))
 
 
 class MeterReading(Base):
@@ -322,6 +343,10 @@ class MeterReading(Base):
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
     room_id = Column(UUID(as_uuid=False), ForeignKey("rooms.id"), nullable=False)
+    contract_id = Column(UUID(as_uuid=False), ForeignKey("contracts.id"), index=True)
+    reading_type = Column(Enum(ReadingType), default=ReadingType.MONTHLY)
+    period_start = Column(Date)
+    period_end = Column(Date)
     reading_month = Column(Integer, nullable=False)  # 1-12
     reading_year = Column(Integer, nullable=False)
     electricity_previous = Column(Float, default=0)
@@ -332,12 +357,15 @@ class MeterReading(Base):
     water_usage = Column(Float)  # computed
     electricity_image = Column(String(500))
     water_image = Column(String(500))
+    is_locked = Column(Boolean, default=False)
     recorded_by = Column(UUID(as_uuid=False), ForeignKey("users.id"))
     recorded_at = Column(DateTime(timezone=True), server_default=func.now())
     notes = Column(Text)
+    archived_at = Column(DateTime(timezone=True))
 
     organization = relationship("Organization")
     room = relationship("Room", back_populates="meter_readings")
+    contract = relationship("Contract")
 
 
 class Invoice(Base):
@@ -373,6 +401,7 @@ class Invoice(Base):
     pdf_url = Column(String(500))
     notes = Column(Text)
     paid_at = Column(DateTime(timezone=True))
+    archived_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -420,6 +449,38 @@ class Payment(Base):
     invoice = relationship("Invoice", back_populates="payments")
 
 
+class DepositTransaction(Base):
+    __tablename__ = "deposit_transactions"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    contract_id = Column(UUID(as_uuid=False), ForeignKey("contracts.id"), nullable=False, index=True)
+    amount = Column(BigInteger, nullable=False)
+    type = Column(Enum(DepositAction), nullable=False)
+    reason = Column(String(500))
+    performed_by = Column(UUID(as_uuid=False), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    contract = relationship("Contract", back_populates="deposit_transactions")
+
+
+class ContractLog(Base):
+    __tablename__ = "contract_logs"
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    contract_id = Column(UUID(as_uuid=False), ForeignKey("contracts.id"), nullable=False, index=True)
+    action = Column(String(100), nullable=False) # e.g., "TERMINATE", "CANCEL", "SETTLE_DEPOSIT"
+    old_status = Column(String(50))
+    new_status = Column(String(50))
+    old_data = Column(JSON)
+    new_data = Column(JSON)
+    performed_by = Column(UUID(as_uuid=False), ForeignKey("users.id"))
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+
+    contract = relationship("Contract", back_populates="contract_logs")
+
+
 class MaintenanceRequest(Base):
     __tablename__ = "maintenance_requests"
     __table_args__ = (
@@ -439,6 +500,7 @@ class MaintenanceRequest(Base):
     assigned_to = Column(UUID(as_uuid=False), ForeignKey("users.id"))
     resolved_at = Column(DateTime(timezone=True))
     resolution_notes = Column(Text)
+    archived_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

@@ -10,7 +10,7 @@ import { formatCurrency } from '@/utils/utils'
 import { Card, PageHeader, PrimaryButton, StatusBadge } from '../_components/ui'
 import DateInput from '@/components/DateInput'
 
-type Room = { id: string; room_number: string; boarding_house_id: string }
+type Room = { id: string; room_number: string; boarding_house_id: string; parking_fee?: number }
 type BoardingHouse = { id: string; name: string }
 type Invoice = {
   id: string
@@ -42,6 +42,13 @@ type Organization = {
   bank_name: string
   bank_account: string
   bank_account_name: string
+  settings?: {
+    default_parking_fee?: number
+    default_electricity_price?: number
+    default_water_price?: number
+    default_internet_fee?: number
+    default_service_fee?: number
+  }
 }
 
 type Tenant = {
@@ -52,9 +59,9 @@ type Tenant = {
 const now = new Date()
 
 function statusLabel(invoice: Invoice) {
-  if (invoice.status === 'draft') return 'Bản nháp'
-  if (invoice.status === 'paid') return 'Đã thanh toán'
-  if (invoice.status === 'cancelled') return 'Đã hủy'
+  if (invoice.status === 'DRAFT') return 'Bản nháp'
+  if (invoice.status === 'PAID') return 'Đã thanh toán'
+  if (invoice.status === 'CANCELLED') return 'Đã hủy'
   
   if (invoice.paid_amount > 0 && invoice.paid_amount < invoice.total_amount) {
     return 'Còn thiếu'
@@ -75,6 +82,7 @@ export default function InvoicesPage() {
   const [isSavingManual, setIsSavingManual] = useState(false)
   const [isGeneratingAuto, setIsGeneratingAuto] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'active' | 'history' | 'archived'>('active')
   const { globalSearchQuery } = useSearchStore()
 
   const [showForm, setShowForm] = useState(false)
@@ -112,8 +120,10 @@ export default function InvoicesPage() {
   const invoicedRoomIdsForFormPeriod = invoices
     .filter((i) => i.billing_month === formMonth && i.billing_year === formYear)
     .map((i) => i.room_id)
+  
+  // Note: Assuming rooms property exists on Room interface or handled
   const roomsForManualInvoice = rooms.filter(
-    (r) => r.status === 'occupied' && !invoicedRoomIdsForFormPeriod.includes(r.id)
+    (r: any) => r.status === 'OCCUPIED' && !invoicedRoomIdsForFormPeriod.includes(r.id)
   )
 
   const filteredInvoices = invoices.filter(i => {
@@ -128,7 +138,7 @@ export default function InvoicesPage() {
       const [housesRes, roomsRes, invoicesRes, orgRes, tenantsRes] = await Promise.all([
         api.getBoardingHouses({ size: 100 }),
         api.getRooms({ size: 100 }),
-        api.getInvoices({ size: 100 }),
+        api.getInvoices({ size: 100, mode: viewMode }),
         api.getOrganization(),
         api.getTenants({ size: 100 })
       ])
@@ -146,7 +156,20 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [viewMode])
+
+  // Auto calculate parking fee: use room's own fee, fallback to org default
+  useEffect(() => {
+    const room = rooms.find(r => r.id === form.room_id)
+    if (room) {
+      const vCount = Number(form.vehicle_count) || 0
+      const pFee = room.parking_fee || organization?.settings?.default_parking_fee || 0
+      setForm(prev => ({
+        ...prev,
+        parking_amount: String(vCount * pFee)
+      }))
+    }
+  }, [form.room_id, form.vehicle_count, rooms, organization])
 
   const generateInvoices = async () => {
     setIsGeneratingAuto(true)
@@ -551,9 +574,14 @@ export default function InvoicesPage() {
                 Tiền Internet
                 <input type="number" value={form.internet_amount} onChange={e => setForm({...form, internet_amount: e.target.value})} className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950" />
               </label>
-              <label className="text-sm font-medium">
-                Tiền gửi xe
-                <input type="number" value={form.parking_amount} onChange={e => setForm({...form, parking_amount: e.target.value})} className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950" />
+              <label className="text-sm font-medium opacity-70">
+                Tiền gửi xe (Tự động)
+                <input 
+                  type="number" 
+                  value={form.parking_amount} 
+                  readOnly 
+                  className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 outline-none dark:border-slate-800 dark:bg-slate-900 cursor-not-allowed" 
+                />
               </label>
               <label className="text-sm font-medium">
                 Số lượng xe
@@ -596,6 +624,27 @@ export default function InvoicesPage() {
           </form>
         </Card>
       )}
+
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
+        <button
+          onClick={() => setViewMode('active')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'active' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Hóa đơn hiện tại
+        </button>
+        <button
+          onClick={() => setViewMode('history')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'history' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Lịch sử thanh toán
+        </button>
+        <button
+          onClick={() => setViewMode('archived')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${viewMode === 'archived' ? 'border-b-2 border-emerald-600 text-emerald-600' : 'text-slate-500 hover:text-slate-700'}`}
+        >
+          Lưu trữ
+        </button>
+      </div>
 
       <Card className="p-5">
         <div className="grid gap-4 sm:grid-cols-[0.5fr_0.6fr_auto] sm:items-end">
@@ -643,7 +692,7 @@ export default function InvoicesPage() {
                   <td className="px-4 py-4"><StatusBadge status={statusLabel(invoice)} /></td>
                   <td className="px-4 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {invoice.status === 'draft' && (
+                      {invoice.status === 'DRAFT' && (
                           <div className="flex gap-4">
                             <button
                               onClick={() => handleConfirm(invoice.id)}
@@ -666,7 +715,7 @@ export default function InvoicesPage() {
                       >
                         <Download className="h-4 w-4" />
                       </button>
-                      {invoice.status === 'sent' && (
+                      {invoice.status !== 'DRAFT' && invoice.status !== 'CANCELLED' && (
                         <button onClick={() => { setPayId(invoice.id); setPayAmount(String(invoice.total_amount - invoice.paid_amount)) }} className="ml-2 font-semibold text-blue-600 hover:text-blue-700">Thu tiền</button>
                       )}
                     </div>

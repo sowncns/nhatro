@@ -20,6 +20,7 @@ async def list_invoices(
     month: Optional[int] = None,
     year: Optional[int] = None,
     room_id: Optional[str] = None,
+    mode: str = Query("active"),
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
@@ -33,9 +34,9 @@ async def list_invoices(
         filters.append(Invoice.billing_year == year)
     if room_id:
         filters.append(Invoice.room_id == room_id)
-    total = await repo.count(filters)
+    total = await repo.count(filters, mode=mode)
     items = await repo.get_all(skip=(page - 1) * size, limit=size, filters=filters,
-                                order_by=Invoice.created_at.desc())
+                                order_by=Invoice.created_at.desc(), mode=mode)
     return PaginatedResponse(
         items=[InvoiceResponse.model_validate(i) for i in items],
         total=total, page=page, size=size,
