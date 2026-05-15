@@ -174,7 +174,7 @@ export default function MeterReadingsPage() {
                 setSelectedHouseId(e.target.value)
                 setForm((v) => ({ ...v, room_id: '' }))
               }}
-              className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950 disabled:opacity-50"
+              className="mt-2 w-full disabled:opacity-50"
             >
               <option value="">Tất cả khu trọ</option>
               {boardingHouses.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
@@ -186,7 +186,7 @@ export default function MeterReadingsPage() {
               disabled={!!editingId}
               value={form.room_id}
               onChange={(e) => setForm({ ...form, room_id: e.target.value })}
-              required className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950 disabled:opacity-50"
+              required className="mt-2 w-full disabled:opacity-50"
             >
               <option value="">Chọn phòng</option>
               {filteredRooms.map((room) => <option key={room.id} value={room.id}>{roomLabel(room.id)}</option>)}

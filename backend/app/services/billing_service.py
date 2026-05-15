@@ -40,7 +40,7 @@ PLAN_CATALOG: Dict[str, dict] = {
         "name": "Scale",
         "price": 799_000,
         "max_rooms": None,
-        "features": ["Không giới hạn phòng", "Báo cáo nâng cao", "Hỗ trợ ưu tiên"],
+        "features": ["Không giới hạn phòng", "Báo cáo nâng cao", "Hỗ trợ ưu tiên","Tự động tạo hóa đơn hàng tháng"],
     },
 }
 

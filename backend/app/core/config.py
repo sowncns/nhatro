@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://postgres:arneca0b18102005Ss@db.nebsjsmspuznpnucvcxj.supabase.co:5432/postgres?sslmode=disable"
     DATABASE_SSL_MODE: str = "disable"
-    DATABASE_USE_NULL_POOL: bool = True
+    DATABASE_USE_NULL_POOL: bool = False
     DATABASE_DISABLE_PREPARED_STATEMENT_CACHE: bool = True
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20

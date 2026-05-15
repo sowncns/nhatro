@@ -121,7 +121,7 @@ export default function RoomsPage() {
         <form className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_0.8fr_0.5fr_0.8fr_0.6fr_auto]" onSubmit={handleSubmit}>
           <label className="text-sm font-medium">
             Khu trọ
-            <select value={form.boarding_house_id} onChange={(e) => setForm({ ...form, boarding_house_id: e.target.value })} required className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950">
+            <select value={form.boarding_house_id} onChange={(e) => setForm({ ...form, boarding_house_id: e.target.value })} required className="mt-2 w-full">
               <option value="">Chọn khu trọ</option>
               {boardingHouses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
             </select>

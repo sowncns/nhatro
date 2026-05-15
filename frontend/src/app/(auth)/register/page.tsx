@@ -65,39 +65,7 @@ export default function RegisterPage() {
 
   return (
     <main className="min-h-screen bg-stone-50 text-slate-950">
-      <div className="grid min-h-screen lg:grid-cols-[0.95fr_1.05fr]">
-        <section className="hidden bg-cyan-950 px-10 py-10 text-white lg:flex lg:flex-col lg:justify-between">
-          <Link href="/" className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-white">
-            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-500 text-cyan-950">
-              <Building2 className="h-5 w-5" aria-hidden="true" />
-            </span>
-            NhaTro Manager
-          </Link>
-
-          <div className="max-w-lg">
-            <p className="text-sm font-semibold uppercase tracking-wider text-emerald-300">Bắt đầu nhanh</p>
-            <h1 className="mt-5 text-4xl font-bold tracking-normal">Tạo tài khoản chủ trọ và thiết lập khu nhà đầu tiên.</h1>
-            <p className="mt-5 text-base leading-7 text-cyan-100">
-              Sau khi đăng ký, hệ thống tự tạo tổ chức quản lý để bạn thêm khu trọ, phòng, khách thuê và hóa đơn.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-              <div className="text-2xl font-bold">1</div>
-              <div className="mt-2 text-sm text-cyan-100">Tài khoản</div>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-              <div className="text-2xl font-bold">2</div>
-              <div className="mt-2 text-sm text-cyan-100">Khu trọ</div>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
-              <div className="text-2xl font-bold">3</div>
-              <div className="mt-2 text-sm text-cyan-100">Vận hành</div>
-            </div>
-          </div>
-        </section>
-
+      <div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
         <section className="flex items-center justify-center px-6 py-10 sm:px-10">
           <div className="w-full max-w-xl rounded-lg border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
             <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 lg:hidden">
@@ -257,6 +225,38 @@ export default function RegisterPage() {
                 Đăng nhập
               </Link>
             </p>
+          </div>
+        </section>
+
+        <section className="hidden bg-cyan-950 px-10 py-10 text-white lg:flex lg:flex-col lg:justify-between">
+          <Link href="/" className="inline-flex w-fit items-center gap-2 text-sm font-semibold text-white">
+            <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-500 text-cyan-950">
+              <Building2 className="h-5 w-5" aria-hidden="true" />
+            </span>
+            NhaTro Manager
+          </Link>
+
+          <div className="max-w-lg">
+            <p className="text-sm font-semibold uppercase tracking-wider text-emerald-300">Bắt đầu nhanh</p>
+            <h1 className="mt-5 text-4xl font-bold tracking-normal">Tạo tài khoản chủ trọ và thiết lập khu nhà đầu tiên.</h1>
+            <p className="mt-5 text-base leading-7 text-cyan-100">
+              Sau khi đăng ký, hệ thống tự tạo tổ chức quản lý để bạn thêm khu trọ, phòng, khách thuê và hóa đơn.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+              <div className="text-2xl font-bold">1</div>
+              <div className="mt-2 text-sm text-cyan-100">Tài khoản</div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+              <div className="text-2xl font-bold">2</div>
+              <div className="mt-2 text-sm text-cyan-100">Khu trọ</div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-white/5 p-4">
+              <div className="text-2xl font-bold">3</div>
+              <div className="mt-2 text-sm text-cyan-100">Vận hành</div>
+            </div>
           </div>
         </section>
       </div>

@@ -120,6 +120,8 @@ class ApiClient {
   createInvoice = (data: any) => this.client.post('/invoices', data)
   autoGenerateInvoices = (month: number, year: number) => this.client.post('/invoices/auto-generate', null, { params: { billing_month: month, billing_year: year } })
   payInvoice = (id: string, amount: number, method: string) => this.client.post(`/invoices/${id}/pay`, null, { params: { amount, payment_method: method } })
+  updateInvoice = (id: string, data: any) => this.client.put(`/invoices/${id}`, data)
+  confirmInvoice = (id: string) => this.client.post(`/invoices/${id}/confirm`)
 
   // SaaS Billing for landlords
   getBillingOverview = () => this.client.get('/billing/overview')

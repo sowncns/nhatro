@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import api from '@/services/api'
 import { useSearchStore } from '@/store/search'
 import { Card, PageHeader, PrimaryButton } from '../_components/ui'
+import DateInput from '@/components/DateInput'
 
 type Tenant = {
   id: string
@@ -80,23 +81,36 @@ export default function TenantsPage() {
     }
     try {
       if (editingId) {
-        await api.updateTenant(editingId, payload)
+        const { data } = await api.updateTenant(editingId, payload)
+        setTenants(prev => prev.map(t => t.id === editingId ? data : t))
         toast.success('Đã cập nhật thông tin khách thuê')
       } else {
-        await api.createTenant(payload)
+        const { data } = await api.createTenant(payload)
+        setTenants(prev => [data, ...prev])
         toast.success('Đã thêm khách thuê mới')
       }
       setForm(emptyForm)
       setEditingId(null)
       setShowForm(false)
-      await loadTenants()
+      // Đã cập nhật state cục bộ phía client; không gọi lại toàn bộ danh sách
+      // để tránh reload toàn bộ UI và mất trạng thái hiện tại.
     } catch {
       toast.error('Không lưu được thông tin khách thuê')
     } finally {
       setIsSaving(false)
     }
   }
+  const formatDate = (values:string) => {
+  const numbers = values.replace(/\D/g, '');
 
+        if (numbers.length <= 2) return numbers;
+
+        if (numbers.length <= 4) {
+          return `${numbers.slice(0, 2)}/${numbers.slice(2)}`;
+        }
+
+        return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4, 8)}`;
+  }
   const startEdit = (tenant: Tenant) => {
     setEditingId(tenant.id)
     setForm({
@@ -189,9 +203,9 @@ export default function TenantsPage() {
                 </label>
                 <label className="text-sm font-medium">
                   Ngày sinh
-                  <input
-                    type="date" value={form.date_of_birth}
-                    onChange={(e) => setForm({ ...form, date_of_birth: e.target.value })}
+                  <DateInput
+                    value={form.date_of_birth}
+                    onChange={(iso) => setForm({ ...form, date_of_birth: iso })}
                     className={cls}
                   />
                 </label>

@@ -1,5 +1,5 @@
 """Meter Readings Endpoints"""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database.session import get_db
@@ -7,6 +7,7 @@ from app.core.deps import get_tenant_context, TenantContext
 from app.models.models import MeterReading
 from app.schemas.schemas import MeterReadingCreate, MeterReadingUpdate, MeterReadingResponse, PaginatedResponse
 from app.repositories.base import BaseRepository
+from app.services.cache_service import CacheService
 
 router = APIRouter()
 
@@ -21,6 +22,11 @@ async def list_meter_readings(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"mr:list:{ctx.organization_id}:{page}:{size}:{room_id}:{month}:{year}"
+    cached = await CacheService.get(cache_key)
+    if cached:
+        return cached
+
     repo = BaseRepository(MeterReading, db, ctx.organization_id)
     filters = []
     if room_id:
@@ -31,11 +37,13 @@ async def list_meter_readings(
         filters.append(MeterReading.reading_year == year)
     total = await repo.count(filters)
     items = await repo.get_all(skip=(page - 1) * size, limit=size, filters=filters)
-    return PaginatedResponse(
+    res = PaginatedResponse(
         items=[MeterReadingResponse.model_validate(r) for r in items],
         total=total, page=page, size=size,
         pages=(total + size - 1) // size,
     )
+    await CacheService.set(cache_key, res.model_dump(), expire=300)
+    return res
 
 
 @router.post("", response_model=MeterReadingResponse, status_code=201)
@@ -74,6 +82,10 @@ async def create_meter_reading(
     reading_data["water_usage"] = data.water_current - water_previous
     reading_data["recorded_by"] = ctx.user.id
     reading = await repo.create(reading_data)
+
+    await CacheService.invalidate(f"mr:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"dashboard:")
+
     return MeterReadingResponse.model_validate(reading)
 
 
@@ -86,9 +98,11 @@ async def update_meter_reading(
 ):
     repo = BaseRepository(MeterReading, db, ctx.organization_id)
     reading = await repo.get_by_id(id)
+    if not reading:
+        raise HTTPException(status_code=404, detail="Reading not found")
+
     update_data = data.model_dump(exclude_unset=True)
 
-    # Calculate usages if fields are being updated
     elec_prev = update_data.get("electricity_previous", reading.electricity_previous)
     elec_curr = update_data.get("electricity_current", reading.electricity_current)
     water_prev = update_data.get("water_previous", reading.water_previous)
@@ -97,8 +111,11 @@ async def update_meter_reading(
     if elec_prev is not None and elec_curr is not None:
         update_data["electricity_usage"] = elec_curr - elec_prev
     if water_prev is not None and water_curr is not None:
-        update_data["water_usage"] = water_curr - water_prev
+        update_data["water_usage"] = water_curr - water_curr
 
     updated = await repo.update(id, update_data)
-    return MeterReadingResponse.model_validate(updated)
 
+    await CacheService.invalidate(f"mr:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"dashboard:")
+
+    return MeterReadingResponse.model_validate(updated)

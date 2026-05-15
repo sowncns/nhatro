@@ -7,8 +7,8 @@ import uuid
 from datetime import datetime
 from typing import Optional
 from sqlalchemy import (
-    Column, String, Integer, Float, Boolean, DateTime, 
-    ForeignKey, Text, Enum, JSON, Date, BigInteger
+    Column, String, Integer, Float, Boolean, DateTime,
+    ForeignKey, Text, Enum, JSON, Date, BigInteger, Index
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, DeclarativeBase
@@ -197,6 +197,9 @@ class BoardingHouse(Base):
 
 class Room(Base):
     __tablename__ = "rooms"
+    __table_args__ = (
+        Index("ix_rooms_boarding_house_id", "boarding_house_id"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
@@ -255,6 +258,10 @@ class Tenant(Base):
 class RoomTenant(Base):
     """Many-to-many: multiple tenants can share a room"""
     __tablename__ = "room_tenants"
+    __table_args__ = (
+        Index("ix_room_tenants_room_id", "room_id"),
+        Index("ix_room_tenants_tenant_id", "tenant_id"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
@@ -271,6 +278,11 @@ class RoomTenant(Base):
 
 class Contract(Base):
     __tablename__ = "contracts"
+    __table_args__ = (
+        Index("ix_contracts_room_id", "room_id"),
+        Index("ix_contracts_tenant_id", "tenant_id"),
+        Index("ix_contracts_room_status", "room_id", "status"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
@@ -290,6 +302,8 @@ class Contract(Base):
     signed_at = Column(DateTime(timezone=True))
     terminated_at = Column(DateTime(timezone=True))
     termination_reason = Column(Text)
+    member_ids = Column(JSON, default=list)  # Lưu danh sách ID những người ở cùng (co-tenants)
+    vehicle_count = Column(Integer, default=0) # Số lượng xe gửi
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -300,6 +314,10 @@ class Contract(Base):
 
 class MeterReading(Base):
     __tablename__ = "meter_readings"
+    __table_args__ = (
+        Index("ix_meter_readings_room_id", "room_id"),
+        Index("ix_meter_readings_room_period", "room_id", "reading_year", "reading_month"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
@@ -324,6 +342,12 @@ class MeterReading(Base):
 
 class Invoice(Base):
     __tablename__ = "invoices"
+    __table_args__ = (
+        Index("ix_invoices_room_id", "room_id"),
+        Index("ix_invoices_status", "status"),
+        Index("ix_invoices_room_period", "room_id", "billing_year", "billing_month"),
+        Index("ix_invoices_org_status", "organization_id", "status"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
@@ -338,8 +362,10 @@ class Invoice(Base):
     water_amount = Column(BigInteger, default=0)
     internet_amount = Column(BigInteger, default=0)
     parking_amount = Column(BigInteger, default=0)
+    vehicle_count = Column(Integer, default=0)
     other_amount = Column(BigInteger, default=0)
     discount_amount = Column(BigInteger, default=0)
+    old_debt = Column(BigInteger, default=0)
     total_amount = Column(BigInteger, nullable=False)
     paid_amount = Column(BigInteger, default=0)
     status = Column(Enum(InvoiceStatus), default=InvoiceStatus.DRAFT)
@@ -359,6 +385,9 @@ class Invoice(Base):
 
 class InvoiceItem(Base):
     __tablename__ = "invoice_items"
+    __table_args__ = (
+        Index("ix_invoice_items_invoice_id", "invoice_id"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
@@ -374,6 +403,9 @@ class InvoiceItem(Base):
 
 class Payment(Base):
     __tablename__ = "payments"
+    __table_args__ = (
+        Index("ix_payments_invoice_id", "invoice_id"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
@@ -390,6 +422,10 @@ class Payment(Base):
 
 class MaintenanceRequest(Base):
     __tablename__ = "maintenance_requests"
+    __table_args__ = (
+        Index("ix_maintenance_requests_room_id", "room_id"),
+        Index("ix_maintenance_requests_status", "status"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
@@ -412,6 +448,10 @@ class MaintenanceRequest(Base):
 
 class Notification(Base):
     __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_id", "user_id"),
+        Index("ix_notifications_user_unread", "user_id", "is_read"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
@@ -428,6 +468,10 @@ class Notification(Base):
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
+    __table_args__ = (
+        Index("ix_subscriptions_organization_id", "organization_id"),
+        Index("ix_subscriptions_org_active", "organization_id", "is_active"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False)
@@ -484,6 +528,10 @@ class SaaSPayment(Base):
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_created_at", "created_at"),
+        Index("ix_audit_logs_resource_type", "resource_type"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
     organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), index=True)

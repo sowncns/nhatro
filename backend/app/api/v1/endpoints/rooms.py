@@ -1,13 +1,13 @@
 """Rooms API Endpoints"""
-from fastapi import APIRouter, Depends, Query, UploadFile, File
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from typing import Optional, List
 from app.database.session import get_db
 from app.core.deps import get_tenant_context, TenantContext
 from app.models.models import Room
 from app.schemas.schemas import RoomCreate, RoomUpdate, RoomResponse, PaginatedResponse
 from app.repositories.base import BaseRepository
+from app.services.cache_service import CacheService
 
 router = APIRouter()
 
@@ -22,6 +22,11 @@ async def list_rooms(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"rooms:list:{ctx.organization_id}:{page}:{size}:{status}:{boarding_house_id}:{search}"
+    cached = await CacheService.get(cache_key)
+    if cached:
+        return cached
+
     repo = BaseRepository(Room, db, ctx.organization_id)
     filters = []
     if status:
@@ -38,13 +43,15 @@ async def list_rooms(
         filters=filters,
         order_by=Room.room_number,
     )
-    return PaginatedResponse(
+    res = PaginatedResponse(
         items=[RoomResponse.model_validate(r) for r in items],
         total=total,
         page=page,
         size=size,
         pages=(total + size - 1) // size,
     )
+    await CacheService.set(cache_key, res.model_dump(), expire=300)
+    return res
 
 
 @router.post("", response_model=RoomResponse, status_code=201)
@@ -67,6 +74,8 @@ async def create_room(
             room_data[key] = value
 
     room = await repo.create(room_data)
+    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"dashboard:")
     return RoomResponse.model_validate(room)
 
 
@@ -79,7 +88,6 @@ async def get_room(
     repo = BaseRepository(Room, db, ctx.organization_id)
     room = await repo.get(room_id)
     if not room:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Room not found")
     return RoomResponse.model_validate(room)
 
@@ -94,8 +102,9 @@ async def update_room(
     repo = BaseRepository(Room, db, ctx.organization_id)
     room = await repo.update(room_id, data.model_dump(exclude_none=True))
     if not room:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Room not found")
+    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"dashboard:")
     return RoomResponse.model_validate(room)
 
 
@@ -108,5 +117,6 @@ async def delete_room(
     repo = BaseRepository(Room, db, ctx.organization_id)
     deleted = await repo.delete(room_id)
     if not deleted:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Room not found")
+    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"dashboard:")

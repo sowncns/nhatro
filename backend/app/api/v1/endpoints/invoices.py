@@ -106,3 +106,24 @@ async def record_payment(
 ):
     service = InvoiceService(db, ctx.organization_id)
     return await service.record_payment(invoice_id, amount, payment_method, reference_number)
+
+
+@router.put("/{invoice_id}", response_model=InvoiceResponse)
+async def update_invoice(
+    invoice_id: str,
+    data: InvoiceCreate,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    service = InvoiceService(db, ctx.organization_id)
+    return await service.update_invoice(invoice_id, data)
+
+
+@router.post("/{invoice_id}/confirm", response_model=InvoiceResponse)
+async def confirm_invoice(
+    invoice_id: str,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    service = InvoiceService(db, ctx.organization_id)
+    return await service.confirm_invoice(invoice_id)

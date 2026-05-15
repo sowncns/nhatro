@@ -7,6 +7,8 @@ import { toast } from 'sonner'
 import api from '@/services/api'
 import { useSearchStore } from '@/store/search'
 import { Card, PageHeader, PrimaryButton, StatusBadge } from '../_components/ui'
+import { formatDate } from '@/utils/utils'
+import DateInput from '@/components/DateInput'
 
 type BoardingHouse = { id: string; name: string }
 type Room = { id: string; room_number: string; boarding_house_id: string; base_price: number }
@@ -16,12 +18,14 @@ type Contract = {
   room_id: string
   tenant_id: string
   contract_number: string
+  member_ids?: string[]
   start_date: string
   end_date: string
   monthly_rent: number
   deposit_amount: number
   deposit_paid: boolean
   status: string
+  vehicle_count: number
 }
 
 const vnd = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' })
@@ -38,10 +42,11 @@ const emptyForm = {
   monthly_rent: '',
   deposit_amount: '',
   payment_due_day: '5',
+  vehicle_count: '0',
 }
 
 const cls =
-  'mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950 disabled:opacity-50'
+  'mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950'
 
 const STATUS_LABEL: Record<string, string> = {
   active: 'Hiệu lực',
@@ -49,12 +54,6 @@ const STATUS_LABEL: Record<string, string> = {
   terminated: 'Đã kết thúc',
 }
 
-const formatDate = (dateStr?: string) => {
-  if (!dateStr) return '-'
-  const parts = dateStr.split('T')[0].split('-')
-  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`
-  return dateStr
-}
 
 export default function ContractsPage() {
   const [boardingHouses, setBoardingHouses] = useState<BoardingHouse[]>([])
@@ -85,7 +84,7 @@ export default function ContractsPage() {
 
   const tenantSearchString = (c: Contract) => {
     const main = tenantLabel(c.tenant_id)
-    const members = (c.member_ids || []).map(id => tenants.find(t => t.id === id)?.full_name).filter(Boolean)
+    const members = (c.member_ids || []).map((id: string) => tenants.find(t => t.id === id)?.full_name).filter(Boolean)
     return [main, ...members].join(' ')
   }
 
@@ -156,6 +155,7 @@ export default function ContractsPage() {
         monthly_rent: Number(form.monthly_rent),
         deposit_amount: Number(form.deposit_amount),
         payment_due_day: Number(form.payment_due_day),
+        vehicle_count: Number(form.vehicle_count),
       })
       toast.success('Đã tạo hợp đồng thành công')
       setForm(emptyForm)
@@ -231,6 +231,7 @@ export default function ContractsPage() {
           <p>Bên A đồng ý cho Bên B thuê phòng trọ số <span class="bold">${room?.room_number || '.....'}</span> thuộc ${house?.name || 'Khu trọ'}.</p>
           <p>Thời hạn thuê: Từ ngày <span class="bold">${formatDate(contract.start_date)}</span> đến ngày <span class="bold">${formatDate(contract.end_date)}</span>.</p>
           <p>Giá thuê phòng: <span class="bold">${vnd.format(contract.monthly_rent)} / tháng</span>.</p>
+          <p>Số lượng xe gửi trong nhà: <span class="bold">${contract.vehicle_count || 0} xe</span>.</p>
           <p>Tiền đặt cọc: <span class="bold">${vnd.format(contract.deposit_amount)}</span>.</p>
         </div>
 
@@ -492,18 +493,20 @@ export default function ContractsPage() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="text-sm font-medium">
                   Ngày bắt đầu <span className="text-red-500">*</span>
-                  <input
-                    type="date" value={form.start_date}
-                    onChange={(e) => setForm({ ...form, start_date: e.target.value })}
-                    required className={cls}
+                  <DateInput
+                    value={form.start_date}
+                    onChange={(iso) => setForm({ ...form, start_date: iso })}
+                    required
+                    className={cls}
                   />
                 </label>
                 <label className="text-sm font-medium">
                   Ngày kết thúc <span className="text-red-500">*</span>
-                  <input
-                    type="date" value={form.end_date}
-                    onChange={(e) => setForm({ ...form, end_date: e.target.value })}
-                    required className={cls}
+                  <DateInput
+                    value={form.end_date}
+                    onChange={(iso) => setForm({ ...form, end_date: iso })}
+                    required
+                    className={cls}
                   />
                 </label>
                 <label className="text-sm font-medium">
@@ -511,7 +514,7 @@ export default function ContractsPage() {
                   <input
                     type="number" value={form.monthly_rent}
                     onChange={(e) => setForm({ ...form, monthly_rent: e.target.value })}
-                    required placeholder="3000000" className={cls}
+                    required placeholder="0" className={cls}
                   />
                 </label>
                 <label className="text-sm font-medium">
@@ -519,11 +522,12 @@ export default function ContractsPage() {
                   <input
                     type="number" value={form.deposit_amount}
                     onChange={(e) => setForm({ ...form, deposit_amount: e.target.value })}
-                    required placeholder="6000000" className={cls}
+                    required placeholder="0" className={cls}
+                    defaultValue={0}
                   />
                 </label>
               </div>
-              <div className="mt-4 max-w-xs">
+              <div className="mt-4 max-w-sm">
                 <label className="text-sm font-medium">
                   Ngày thanh toán hàng tháng (ngày mấy trong tháng)
                   <input
@@ -532,6 +536,26 @@ export default function ContractsPage() {
                     className={cls}
                   />
                 </label>
+                <label className="text-sm font-medium">
+                  Số lượng xe gửi trong nhà
+                  <input
+                    type="number" min="0" value={form.vehicle_count}
+                    onChange={(e) => setForm({ ...form, vehicle_count: e.target.value })}
+                    className={cls}
+                    placeholder="Ví dụ: 2"
+                  />
+                </label>
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                {/* <label className="text-sm font-medium">
+                  Số lượng xe gửi trong nhà
+                  <input
+                    type="number" min="0" value={form.vehicle_count}
+                    onChange={(e) => setForm({ ...form, vehicle_count: e.target.value })}
+                    className={cls}
+                    placeholder="Ví dụ: 2"
+                  />
+                </label> */}
               </div>
             </div>
 
@@ -600,7 +624,7 @@ export default function ContractsPage() {
                       <div className="font-medium">{tenantLabel(contract.tenant_id)}</div>
                       {contract.member_ids && contract.member_ids.length > 0 && (
                         <div className="mt-1 text-xs text-slate-500">
-                          + {(contract.member_ids).map(id => tenants.find(t => t.id === id)?.full_name).filter(Boolean).join(', ')}
+                          + {(contract.member_ids).map((id: string) => tenants.find(t => t.id === id)?.full_name).filter(Boolean).join(', ')}
                         </div>
                       )}
                     </td>

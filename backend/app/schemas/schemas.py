@@ -194,7 +194,7 @@ class TenantCreate(BaseModel):
     full_name: str
     phone: str
     email: Optional[str] = None
-    id_card: Optional[str] = None
+    id_card: str
     date_of_birth: Optional[date] = None
     permanent_address: Optional[str] = None
     emergency_contact_name: Optional[str] = None
@@ -243,6 +243,8 @@ class ContractCreate(BaseModel):
     deposit_amount: int
     payment_due_day: int = 5
     terms: Optional[str] = None
+    member_ids: List[str] = Field(default_factory=list)
+    vehicle_count: int = 0
 
 
 class ContractResponse(BaseModel):
@@ -259,6 +261,8 @@ class ContractResponse(BaseModel):
     deposit_returned: bool
     payment_due_day: int
     status: str
+    member_ids: List[str]
+    vehicle_count: int
     pdf_url: Optional[str]
     created_at: datetime
 
@@ -317,8 +321,10 @@ class InvoiceCreate(BaseModel):
     water_amount: int = 0
     internet_amount: int = 0
     parking_amount: int = 0
+    vehicle_count: int = 0
     other_amount: int = 0
     discount_amount: int = 0
+    old_debt: int = 0
     due_date: date
     notes: Optional[str] = None
 
@@ -336,8 +342,10 @@ class InvoiceResponse(BaseModel):
     water_amount: int
     internet_amount: int
     parking_amount: int
+    vehicle_count: int
     other_amount: int
     discount_amount: int
+    old_debt: int
     total_amount: int
     paid_amount: int
     status: str

@@ -12,16 +12,78 @@ export function formatNumber(num: number): string {
   return new Intl.NumberFormat('vi-VN').format(num)
 }
 
-// Format date to dd/mm/yyyy
-export function formatDate(dateStr: string | Date): string {
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('vi-VN')
+// Format date to dd/MM/yyyy (always zero-padded)
+export function formatDate(dateStr?: string | Date | null): string {
+  if (!dateStr) return ''
+
+  // If already a Date
+  if (dateStr instanceof Date) {
+    const d = dateStr
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const yyyy = d.getFullYear()
+    return `${dd}/${mm}/${yyyy}`
+  }
+
+  const s = String(dateStr)
+
+  // Handle plain ISO date 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:MM:SS...'
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/)
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch
+    return `${d}/${m}/${y}`
+  }
+
+  // Fallback to Date.parse
+  const ms = Date.parse(s)
+  if (!isNaN(ms)) {
+    const d = new Date(ms)
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const yyyy = d.getFullYear()
+    return `${dd}/${mm}/${yyyy}`
+  }
+
+  // If all else fails, return original string
+  return s
 }
 
-// Format datetime
-export function formatDateTime(dateStr: string | Date): string {
-  const d = new Date(dateStr)
-  return d.toLocaleString('vi-VN')
+// Format datetime to 'dd/MM/yyyy HH:mm'
+export function formatDateTime(dateStr?: string | Date | null): string {
+  if (!dateStr) return ''
+  const ms = dateStr instanceof Date ? dateStr.getTime() : Date.parse(String(dateStr))
+  if (isNaN(ms)) return String(dateStr)
+  const d = new Date(ms)
+  const date = formatDate(d)
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${date} ${hh}:${mm}`
+}
+
+// Parse a date string in dd/MM/yyyy or ISO (yyyy-MM-dd) to ISO 'yyyy-MM-dd'
+export function parseDateToISO(dateStr?: string | null): string {
+  if (!dateStr) return ''
+  const s = String(dateStr).trim()
+
+  // Already ISO
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/) 
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
+
+  // dd/MM/yyyy
+  const dmy = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`
+
+  // Try Date.parse fallback
+  const ms = Date.parse(s)
+  if (!isNaN(ms)) {
+    const d = new Date(ms)
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
+
+  return ''
 }
 
 // Get status badge color

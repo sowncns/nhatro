@@ -1,18 +1,13 @@
 """Tenants Endpoints"""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 from app.database.session import get_db
 from app.core.deps import get_tenant_context, TenantContext
-from app.models.models import Tenant, Contract, MeterReading
-from app.schemas.schemas import (
-    TenantCreate, TenantUpdate, TenantResponse,
-    ContractCreate, ContractResponse,
-    MeterReadingCreate, MeterReadingResponse,
-    PaginatedResponse
-)
+from app.models.models import Tenant
+from app.schemas.schemas import TenantCreate, TenantUpdate, TenantResponse, PaginatedResponse
 from app.repositories.base import BaseRepository
-import uuid
+from app.services.cache_service import CacheService
 
 router = APIRouter()
 
@@ -25,6 +20,11 @@ async def list_tenants(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"tenants:list:{ctx.organization_id}:{page}:{size}:{search}"
+    cached = await CacheService.get(cache_key)
+    if cached:
+        return cached
+
     repo = BaseRepository(Tenant, db, ctx.organization_id)
     filters = [Tenant.is_active == True]
     if search:
@@ -35,11 +35,13 @@ async def list_tenants(
         ))
     total = await repo.count(filters)
     items = await repo.get_all(skip=(page - 1) * size, limit=size, filters=filters)
-    return PaginatedResponse(
+    res = PaginatedResponse(
         items=[TenantResponse.model_validate(t) for t in items],
         total=total, page=page, size=size,
         pages=(total + size - 1) // size,
     )
+    await CacheService.set(cache_key, res.model_dump(), expire=300)
+    return res
 
 
 @router.post("", response_model=TenantResponse, status_code=201)
@@ -49,7 +51,14 @@ async def create_tenant(
     db: AsyncSession = Depends(get_db),
 ):
     repo = BaseRepository(Tenant, db, ctx.organization_id)
+    if data.id_card:
+        existing = await repo.get_all(filters=[Tenant.id_card == data.id_card, Tenant.is_active == True])
+        if existing:
+            raise HTTPException(status_code=400, detail="Khách thuê với số CCCD này đã tồn tại trong hệ thống")
+            
     tenant = await repo.create(data.model_dump())
+    await CacheService.invalidate(f"tenants:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"dashboard:")
     return TenantResponse.model_validate(tenant)
 
 
@@ -62,7 +71,6 @@ async def get_tenant(
     repo = BaseRepository(Tenant, db, ctx.organization_id)
     tenant = await repo.get(tenant_id)
     if not tenant:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Tenant not found")
     return TenantResponse.model_validate(tenant)
 
@@ -77,6 +85,7 @@ async def update_tenant(
     repo = BaseRepository(Tenant, db, ctx.organization_id)
     tenant = await repo.update(tenant_id, data.model_dump(exclude_none=True))
     if not tenant:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
+    await CacheService.invalidate(f"tenants:list:{ctx.organization_id}")
+    await CacheService.invalidate(f"dashboard:")
     return TenantResponse.model_validate(tenant)
