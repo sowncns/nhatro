@@ -5,6 +5,7 @@ import { Home, Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 import api from '@/services/api'
+import { useSearchStore } from '@/store/search'
 import { formatCurrency } from '@/utils/utils'
 import { Card, PageHeader, PrimaryButton, StatusBadge } from '../_components/ui'
 
@@ -42,8 +43,15 @@ export default function RoomsPage() {
   const [form, setForm] = useState(emptyForm)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const { globalSearchQuery } = useSearchStore()
 
   const houseName = (id: string) => boardingHouses.find((house) => house.id === id)?.name || '-'
+
+  const filteredRooms = rooms.filter(r => {
+    if (!globalSearchQuery) return true
+    const q = globalSearchQuery.toLowerCase()
+    return r.room_number.toLowerCase().includes(q) || houseName(r.boarding_house_id).toLowerCase().includes(q)
+  })
 
   const loadData = async () => {
     setIsLoading(true)
@@ -160,7 +168,9 @@ export default function RoomsPage() {
                 <tr><td className="px-4 py-4 text-slate-500" colSpan={6}>Đang tải phòng...</td></tr>
               ) : rooms.length === 0 ? (
                 <tr><td className="px-4 py-4 text-slate-500" colSpan={6}>Chưa có phòng nào.</td></tr>
-              ) : rooms.map((room) => (
+              ) : filteredRooms.length === 0 ? (
+                <tr><td className="px-4 py-4 text-center text-slate-500" colSpan={6}>Không tìm thấy phòng nào khớp với "{globalSearchQuery}"</td></tr>
+              ) : filteredRooms.map((room) => (
                 <tr key={room.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50">
                   <td className="px-4 py-4">{houseName(room.boarding_house_id)}</td>
                   <td className="px-4 py-4 font-semibold"><Home className="mr-2 inline h-4 w-4 text-slate-400" />{room.room_number}</td>

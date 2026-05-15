@@ -5,6 +5,7 @@ import { Calculator, Loader2, Pencil, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import api from '@/services/api'
+import { useSearchStore } from '@/store/search'
 import { Card, PageHeader, PrimaryButton } from '../_components/ui'
 
 type Room = { id: string; room_number: string; boarding_house_id: string; status: string }
@@ -43,6 +44,7 @@ export default function MeterReadingsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const { globalSearchQuery } = useSearchStore()
 
   // Chỉ lấy những phòng đang có khách thuê (occupied hoặc có hợp đồng active)
   const occupiedRooms = rooms.filter(
@@ -59,6 +61,20 @@ export default function MeterReadingsPage() {
     const house = boardingHouses.find((item) => item.id === room?.boarding_house_id)
     return `${house?.name || 'Khu trọ'} - Phòng ${room.room_number}`
   }
+
+  const filteredReadings = readings.filter(item => {
+    if (!globalSearchQuery) return true
+    const q = globalSearchQuery.toLowerCase()
+    return roomLabel(item.room_id).toLowerCase().includes(q)
+  })
+
+  const currentMonth = Number(form.reading_month)
+  const currentYear = Number(form.reading_year)
+  const recordedRoomIds = readings
+    .filter((r) => r.reading_month === currentMonth && r.reading_year === currentYear)
+    .map((r) => r.room_id)
+
+  const unrecordedRooms = filteredRooms.filter((r) => !recordedRoomIds.includes(r.id))
 
   const loadData = async () => {
     setIsLoading(true)
@@ -136,11 +152,7 @@ export default function MeterReadingsPage() {
       <PageHeader
         title="Quản lý điện nước"
         description="Ghi nhận và điều chỉnh số điện, nước hàng tháng. Chỉ những phòng đang cho thuê mới hiển thị trong danh sách ghi chỉ số."
-        action={
-          <PrimaryButton onClick={cancelEdit}>
-            <Plus className="h-4 w-4" /> Ghi chỉ số mới
-          </PrimaryButton>
-        }
+       
       />
 
       <Card className="p-5">
@@ -224,6 +236,38 @@ export default function MeterReadingsPage() {
             )}
           </div>
         </form>
+
+        {!editingId && (
+          <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+            {unrecordedRooms.length > 0 ? (
+              <>
+                <div className="mb-3 text-sm font-medium text-amber-600 dark:text-amber-500">
+                  Cảnh báo: Có {unrecordedRooms.length} phòng đang thuê nhưng chưa ghi chỉ số tháng {form.reading_month}/{form.reading_year}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {unrecordedRooms.map(r => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setForm(prev => ({ ...prev, room_id: r.id }))}
+                      className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${
+                        form.room_id === r.id
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      Phòng {r.room_number}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : occupiedRooms.length > 0 ? (
+              <div className="text-sm font-medium text-emerald-600 dark:text-emerald-500">
+                Tuyệt vời! Tất cả các phòng đều đã được ghi chỉ số trong tháng {form.reading_month}/{form.reading_year}.
+              </div>
+            ) : null}
+          </div>
+        )}
       </Card>
 
       <Card className="overflow-hidden">
@@ -244,8 +288,10 @@ export default function MeterReadingsPage() {
                 <tr><td className="px-4 py-6 text-center text-slate-500" colSpan={6}>Đang tải chỉ số...</td></tr>
               ) : readings.length === 0 ? (
                 <tr><td className="px-4 py-8 text-center text-slate-400" colSpan={6}>Chưa có chỉ số nào được ghi.</td></tr>
+              ) : filteredReadings.length === 0 ? (
+                <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={6}>Không tìm thấy chỉ số phù hợp với "{globalSearchQuery}"</td></tr>
               ) : (
-                readings.map((item) => (
+                filteredReadings.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                     <td className="px-4 py-3 font-semibold">{roomLabel(item.room_id)}</td>
                     <td className="px-4 py-3">{item.reading_month}/{item.reading_year}</td>

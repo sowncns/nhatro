@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 
 import { useAuthStore } from '@/store/auth'
+import { useSearchStore } from '@/store/search'
 
 const navigation = [
   { name: 'Tổng quan', href: '/dashboard', icon: LayoutDashboard },
@@ -47,6 +48,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const logout = useAuthStore((state) => state.logout)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isDark, setIsDark] = useState(false)
+  const { globalSearchQuery, setGlobalSearchQuery } = useSearchStore()
+
+  // Reset search when changing route
+  useEffect(() => {
+    setGlobalSearchQuery('')
+  }, [pathname, setGlobalSearchQuery])
 
   useEffect(() => {
     const stored = localStorage.getItem('nhatro-theme')
@@ -143,7 +150,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
               <input
                 type="search"
-                placeholder="Tìm phòng, khách thuê, hóa đơn..."
+                placeholder="Tìm kiếm..."
+                value={globalSearchQuery}
+                onChange={(e) => setGlobalSearchQuery(e.target.value)}
                 className="h-10 w-full max-w-xl rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-900"
               />
             </div>

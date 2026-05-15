@@ -81,6 +81,7 @@ class ApiClient {
   getDashboardStats = () => this.client.get('/dashboard/stats')
   getRevenue = (year?: number) => this.client.get('/dashboard/revenue', { params: { year } })
   getOccupancy = () => this.client.get('/dashboard/occupancy')
+  globalSearch = (q: string) => this.client.get('/dashboard/search', { params: { q } })
 
   // Boarding Houses
   getBoardingHouses = (params?: any) => this.client.get('/boarding-houses', { params })

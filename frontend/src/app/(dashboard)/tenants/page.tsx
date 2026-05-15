@@ -5,6 +5,7 @@ import { Loader2, Pencil, Phone, Plus, UserRound, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import api from '@/services/api'
+import { useSearchStore } from '@/store/search'
 import { Card, PageHeader, PrimaryButton } from '../_components/ui'
 
 type Tenant = {
@@ -40,6 +41,15 @@ export default function TenantsPage() {
   const [showForm, setShowForm] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const { globalSearchQuery } = useSearchStore()
+
+  const filteredTenants = tenants.filter(t => {
+    if (!globalSearchQuery) return true
+    const q = globalSearchQuery.toLowerCase()
+    return t.full_name.toLowerCase().includes(q) || 
+           t.phone.includes(q) || 
+           (t.id_card && t.id_card.includes(q))
+  })
 
   const loadTenants = async () => {
     setIsLoading(true)
@@ -169,11 +179,11 @@ export default function TenantsPage() {
                   />
                 </label>
                 <label className="text-sm font-medium">
-                  Số CCCD / CMND
+                  Số CCCD / CMND <span className="text-red-500">*</span>
                   <input
                     value={form.id_card}
                     onChange={(e) => setForm({ ...form, id_card: e.target.value })}
-                    placeholder="012345678901"
+                    required placeholder="012345678901"
                     className={cls}
                   />
                 </label>
@@ -251,8 +261,12 @@ export default function TenantsPage() {
             <p className="mt-3 font-semibold text-slate-600 dark:text-slate-400">Chưa có khách thuê nào</p>
             <p className="mt-1 text-sm text-slate-400">Nhấn "Thêm khách thuê" để bắt đầu tạo hồ sơ.</p>
           </Card>
+        ) : filteredTenants.length === 0 ? (
+          <Card className="col-span-3 p-8 text-center text-slate-500">
+            Không tìm thấy khách thuê phù hợp với từ khóa "{globalSearchQuery}"
+          </Card>
         ) : (
-          tenants.map((tenant) => (
+          filteredTenants.map((tenant) => (
             <Card key={tenant.id} className="p-5">
               <div className="flex items-start gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-800 to-slate-600 text-sm font-bold text-white dark:from-slate-200 dark:to-slate-400 dark:text-slate-900">
