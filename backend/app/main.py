@@ -27,6 +27,8 @@ async def lifespan(app: FastAPI):
             await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'platform_admin'"))
             await conn.execute(text("ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'starter'"))
             await conn.execute(text("ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'scale'"))
+            await conn.execute(text("ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'WAITING_VERIFY'"))
+            await conn.execute(text("ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'REJECTED'"))
     logger.info("Database tables created/verified")
     yield
     # Shutdown
@@ -83,6 +85,13 @@ async def global_exception_handler(request: Request, exc: Exception):
 # ─── Routes ──────────────────────────────────────────────
 
 app.include_router(api_router, prefix="/api/v1")
+
+from fastapi.staticfiles import StaticFiles
+import os
+
+# Ensure uploads directory exists
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 @app.get("/health")

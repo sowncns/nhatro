@@ -14,6 +14,22 @@ from app.database.models import (
     InvoiceStatus, ContractStatus
 )
 from app.schemas.schemas import InvoiceCreate, InvoiceResponse
+from app.core.config import settings
+from payos import PayOS
+from payos.types import CreatePaymentLinkRequest
+import logging
+
+logger = logging.getLogger(__name__)
+
+payos_client = None
+if settings.PAYOS_CLIENT_ID and settings.PAYOS_API_KEY and settings.PAYOS_CHECKSUM_KEY:
+    payos_client = PayOS(
+        client_id=settings.PAYOS_CLIENT_ID,
+        api_key=settings.PAYOS_API_KEY,
+        checksum_key=settings.PAYOS_CHECKSUM_KEY
+    )
+else:
+    logger.warning("PayOS credentials are not fully configured in InvoiceService.")
 
 
 class InvoiceService:
@@ -197,98 +213,24 @@ class InvoiceService:
         return InvoiceResponse.model_validate(invoice)
 
     async def _generate_banking_qr(self, invoice: Invoice) -> str:
-        """Generate VietQR banking QR code"""
-        # Get org bank info
+        """Generate VietQR image URL for direct bank transfer"""
+        from app.models.models import Organization
         org_result = await self.db.execute(
-            select(Organization).where(Organization.id == self.organization_id)
+            select(Organization).where(Organization.id == invoice.organization_id)
         )
         org = org_result.scalar_one_or_none()
-
-        if not org or not org.bank_account:
-            return ""
-
-        # VietQR format
-        bank_map = {
-            "vietinbank": "970415",
-            "vietcombank": "970436",
-            "bidv": "970418",
-            "agribank": "970405",
-            "ocb": "970448",
-            "mbbank": "970422",
-            "techcombank": "970407",
-            "acb": "970416",
-            "vpbank": "970432",
-            "tpbank": "970423",
-            "sacombank": "970403",
-            "hdbank": "970437",
-            "vietcapitalbank": "970454",
-            "scb": "970429",
-            "vib": "970441",
-            "shb": "970443",
-            "eximbank": "970431",
-            "msb": "970426",
-            "cake": "546034",
-            "ubank": "546035",
-            "viettelmoney": "971005",
-            "timo": "963388",
-            "vnptmoney": "971011",
-            "saigonbank": "970400",
-            "bacabank": "970409",
-            "momo": "971025",
-            "pvcombank pay": "971133",
-            "pvcombank": "970412",
-            "mbv": "970414",
-            "ncb": "970419",
-            "shinhanbank": "970424",
-            "abbank": "970425",
-            "vietabank": "970427",
-            "namabank": "970428",
-            "pgbank": "970430",
-            "vietbank": "970433",
-            "baovietbank": "970438",
-            "seabank": "970440",
-            "coopbank": "970446",
-            "lpbank": "970449",
-            "kienlongbank": "970452",
-            "kbank": "668888",
-            "mafc": "977777",
-            "hongleong": "970442",
-            "kebhanahn": "970467",
-            "kebhanahcm": "970466",
-            "citibank": "533948",
-            "cbbank": "970444",
-            "cimb": "422589",
-            "dbsbank": "796500",
-            "vikki": "970406",
-            "vbsp": "999888",
-            "gpbank": "970408",
-            "kookminhcm": "970463",
-            "kookminhn": "970462",
-            "woori": "970457",
-            "vrb": "970421",
-            "hsbc": "458761",
-            "ibkhn": "970455",
-            "ibkhcm": "970456",
-            "indovinabank": "970434",
-            "unitedoverseas": "970458",
-            "nonghyup": "801011",
-            "standardchartered": "970410",
-            "publicbank": "970439",
-        }
-
-        bank_name_norm = (org.bank_name or "").strip().lower()
-        bank_bin = bank_map.get(bank_name_norm, "970436") # Default to VCB if not found but account exists
         
-        amount = (invoice.total_amount or 0) - (invoice.paid_amount or 0)
-        description = f"Thanh toan {invoice.invoice_number}"
-
-        qr_string = (
-            f"https://img.vietqr.io/image/{bank_bin}-{org.bank_account}"
-            f"-compact2.png?amount={amount}&addInfo={description}"
-            f"&accountName={org.bank_account_name or ''}"
-        )
-
-        return qr_string
+        if org and org.bank_name and org.bank_account:
+            amount = invoice.total_amount - (invoice.paid_amount or 0)
+            description = f"THANH TOAN HOA DON {invoice.invoice_number}"
+            
+            import urllib.parse
+            desc_encoded = urllib.parse.quote(description)
+            name_encoded = urllib.parse.quote(org.bank_account_name or "")
+            
+            return f"https://img.vietqr.io/image/{org.bank_name}-{org.bank_account}-compact2.png?amount={amount}&addInfo={desc_encoded}&accountName={name_encoded}"
+            
+        return ""
 
     async def record_payment(
         self,
@@ -301,36 +243,42 @@ class InvoiceService:
         from app.models.models import Payment
         from datetime import timezone
 
-        invoice_result = await self.db.execute(
-            select(Invoice).where(
-                Invoice.id == invoice_id,
-                Invoice.organization_id == self.organization_id,
+        try:
+            invoice_result = await self.db.execute(
+                select(Invoice).where(
+                    Invoice.id == invoice_id,
+                    Invoice.organization_id == self.organization_id,
+                )
             )
-        )
-        invoice = invoice_result.scalar_one_or_none()
-        if not invoice:
-            raise HTTPException(status_code=404, detail="Invoice not found")
+            invoice = invoice_result.scalar_one_or_none()
+            if not invoice:
+                raise HTTPException(status_code=404, detail="Invoice not found")
 
-        payment = Payment(
-            organization_id=self.organization_id,
-            invoice_id=invoice_id,
-            amount=amount,
-            payment_method=payment_method,
-            reference_number=reference_number,
-            notes=notes,
-        )
-        self.db.add(payment)
+            payment = Payment(
+                organization_id=self.organization_id,
+                invoice_id=invoice_id,
+                amount=amount,
+                payment_method="CASH" if payment_method == "cash" else "BANK_TRANSFER",
+                reference_number=reference_number,
+                notes=notes,
+            )
+            self.db.add(payment)
 
-        invoice.paid_amount += amount
-        if invoice.paid_amount >= invoice.total_amount:
-            invoice.status = InvoiceStatus.PAID
-            invoice.paid_at = datetime.now(timezone.utc)
-        elif invoice.paid_amount > 0:
-            invoice.status = InvoiceStatus.SENT  # partial payment
+            invoice.paid_amount = (invoice.paid_amount or 0) + amount
+            if invoice.paid_amount >= invoice.total_amount:
+                invoice.status = InvoiceStatus.PAID
+                invoice.paid_at = datetime.now(timezone.utc)
+            elif invoice.paid_amount > 0:
+                invoice.status = InvoiceStatus.SENT  # partial payment
 
-        await self.db.flush()
-        await self.db.refresh(invoice)
-        return InvoiceResponse.model_validate(invoice)
+            await self.db.flush()
+            await self.db.refresh(invoice)
+            return InvoiceResponse.model_validate(invoice)
+        except Exception as e:
+            import traceback
+            with open("contracts_error.log", "a", encoding="utf-8") as f:
+                f.write(f"Error at {datetime.now()} (record_payment): {e}\n{traceback.format_exc()}\n")
+            raise HTTPException(status_code=500, detail=str(e))
 
     async def update_invoice(
         self,

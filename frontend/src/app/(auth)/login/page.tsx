@@ -134,6 +134,13 @@ export default function LoginPage() {
                 Đăng ký ngay
               </Link>
             </p>
+
+            <div className="mt-6 border-t border-slate-200 pt-6 text-center">
+              <p className="text-sm text-slate-600 mb-3">Bạn là người thuê trọ?</p>
+              <Link href="/portal/login" className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
+                Truy cập Portal Người Thuê
+              </Link>
+            </div>
           </div>
         </section>
 

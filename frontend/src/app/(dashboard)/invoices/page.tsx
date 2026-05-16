@@ -28,6 +28,7 @@ type Invoice = {
   discount_amount: number
   old_debt: number
   total_amount: number
+  paid_amount: number
   status: string
   due_date: string
   created_at: string
@@ -288,6 +289,16 @@ export default function InvoicesPage() {
       loadData()
     } catch {
       toast.error('Lỗi khi ghi nhận thanh toán')
+    }
+  }
+
+  const handleApprove = async (id: string) => {
+    try {
+      await api.approveInvoice(id)
+      toast.success('Đã duyệt hóa đơn')
+      loadData()
+    } catch {
+      toast.error('Lỗi khi duyệt hóa đơn')
     }
   }
 
@@ -670,6 +681,7 @@ export default function InvoicesPage() {
               <tr>
                 <th className="px-4 py-3">Mã hóa đơn</th>
                 <th className="px-4 py-3">Phòng</th>
+                <th className="px-4 py-3">Khách thuê</th>
                 <th className="px-4 py-3">Kỳ</th>
                 <th className="px-4 py-3">Số tiền</th>
                 <th className="px-4 py-3">Trạng thái</th>
@@ -687,8 +699,14 @@ export default function InvoicesPage() {
                 <tr key={invoice.id}>
                   <td className="px-4 py-4 font-semibold">{invoice.invoice_number}</td>
                   <td className="px-4 py-4">{roomLabel(invoice.room_id)}</td>
+                  <td className="px-4 py-4">{invoice.representative_name || 'N/A'}</td>
                   <td className="px-4 py-4">{invoice.billing_month}/{invoice.billing_year}</td>
-                  <td className="px-4 py-4">{formatCurrency(invoice.total_amount)}</td>
+                  <td className="px-4 py-4">
+                    <div>{formatCurrency(invoice.total_amount)}</div>
+                    {invoice.paid_amount > 0 && invoice.paid_amount < invoice.total_amount && (
+                      <div className="text-xs text-red-500 mt-1">Còn thiếu: {formatCurrency(invoice.total_amount - invoice.paid_amount)}</div>
+                    )}
+                  </td>
                   <td className="px-4 py-4"><StatusBadge status={statusLabel(invoice)} /></td>
                   <td className="px-4 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
@@ -708,6 +726,14 @@ export default function InvoicesPage() {
                             </button>
                           </div>
                       )}
+                      {invoice.status === 'WAITING_VERIFY' && (
+                        <button
+                          onClick={() => handleApprove(invoice.id)}
+                          className="font-semibold text-emerald-600 hover:text-emerald-700"
+                        >
+                          Duyệt
+                        </button>
+                      )}
                       <button
                         onClick={() => printInvoice(invoice)}
                         className="rounded-lg bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
@@ -715,7 +741,7 @@ export default function InvoicesPage() {
                       >
                         <Download className="h-4 w-4" />
                       </button>
-                      {invoice.status !== 'DRAFT' && invoice.status !== 'CANCELLED' && (
+                      {invoice.status !== 'DRAFT' && invoice.status !== 'CANCELLED' && invoice.status !== 'PAID' && (
                         <button onClick={() => { setPayId(invoice.id); setPayAmount(String(invoice.total_amount - invoice.paid_amount)) }} className="ml-2 font-semibold text-blue-600 hover:text-blue-700">Thu tiền</button>
                       )}
                     </div>

@@ -49,6 +49,17 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+class TenantOTPSendRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+
+
+class TenantOTPVerifyRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    otp_code: str
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
@@ -310,7 +321,7 @@ class ContractLogResponse(BaseModel):
 class MeterReadingCreate(BaseModel):
     room_id: str
     contract_id: Optional[str] = None
-    reading_type: str = "monthly"
+    reading_type: str = "MONTHLY"
     period_start: Optional[date] = None
     period_end: Optional[date] = None
     reading_month: int
@@ -394,6 +405,7 @@ class InvoiceResponse(BaseModel):
     total_amount: int
     paid_amount: int
     status: str
+    representative_name: Optional[str] = None
     qr_code_url: Optional[str]
     pdf_url: Optional[str]
     notes: Optional[str]
@@ -554,3 +566,15 @@ class ContractTerminateRequest(BaseModel):
     move_out_reason: Optional[str] = "Kết thúc hợp đồng"
     termination_note: Optional[str] = None
     deposit_deductions: List[DepositDeduction] = []
+
+
+class ComplaintCreate(BaseModel):
+    title: str
+    description: str
+    contract_id: str
+
+
+class RepairRequestCreate(BaseModel):
+    title: str
+    description: str
+    contract_id: str

@@ -128,6 +128,7 @@ class ApiClient {
   payInvoice = (id: string, amount: number, method: string) => this.client.post(`/invoices/${id}/pay`, null, { params: { amount, payment_method: method } })
   updateInvoice = (id: string, data: any) => this.client.put(`/invoices/${id}`, data)
   confirmInvoice = (id: string) => this.client.post(`/invoices/${id}/confirm`)
+  approveInvoice = (id: string) => this.client.post(`/invoices/${id}/approve`)
 
   // SaaS Billing for landlords
   getBillingOverview = () => this.client.get('/billing/overview')
@@ -139,6 +140,31 @@ class ApiClient {
   getPlatformCustomers = () => this.client.get('/admin/customers')
   getPlatformPayments = (params?: any) => this.client.get('/admin/payments', { params })
   approvePlatformPayment = (paymentId: string) => this.client.post(`/admin/payments/${paymentId}/approve`)
+
+  // Tenant Portal
+  // OTP methods removed - using direct login instead
+  // tenantSendOtp = (data: { email?: string; phone?: string }) => this.client.post('/tenant/auth/send-otp', data)
+  // tenantVerifyOtp = (data: { email?: string; phone?: string; otp_code: string }) => this.client.post('/tenant/auth/verify-otp', data)
+  tenantGetRooms = () => this.client.get('/tenant/portal/rooms')
+  tenantGetInvoices = () => this.client.get('/tenant/portal/invoices')
+  tenantGetInvoice = (id: string) => this.client.get(`/tenant/portal/invoices/${id}`)
+  tenantGetContracts = () => this.client.get('/tenant/portal/contracts')
+  tenantCreateComplaint = (data: { title: string; description: string; contract_id: string }) => this.client.post('/tenant/portal/complaints', data)
+  tenantCreateRepairRequest = (data: { title: string; description: string; contract_id: string }) => this.client.post('/tenant/portal/repair-requests', data)
+  tenantUploadProof = (invoiceId: string, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return this.client.post(`/tenant/portal/invoices/${invoiceId}/proof`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
+  tenantUploadRepairImage = (requestId: string, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return this.client.post(`/tenant/portal/repair-requests/${requestId}/images`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+  }
 }
 
 export const api = new ApiClient()

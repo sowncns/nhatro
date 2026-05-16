@@ -80,6 +80,42 @@ async def get_tenant_context(
     return TenantContext(user=user, organization=org)
 
 
+class PortalTenantContext:
+    def __init__(self, tenant_id: str, contract_ids: list[str]):
+        self.tenant_id = tenant_id
+        self.contract_ids = contract_ids
+
+
+async def get_portal_tenant_context(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> PortalTenantContext:
+    token = credentials.credentials
+    payload = verify_token(token, "access")
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+        
+    role = payload.get("role")
+    if role != "tenant":
+        raise HTTPException(status_code=403, detail="Forbidden: Not a tenant")
+        
+    tenant_id = payload.get("sub")
+    
+    # Fetch active contracts for this tenant
+    from app.database.models import Contract
+    from sqlalchemy import select
+    result = await db.execute(
+        select(Contract).where(
+            Contract.tenant_id == tenant_id,
+            Contract.status == "ACTIVE"
+        )
+    )
+    contracts = result.scalars().all()
+    contract_ids = [str(c.id) for c in contracts]
+    
+    return PortalTenantContext(tenant_id=tenant_id, contract_ids=contract_ids)
+
+
 def require_owner_or_manager(ctx: TenantContext = Depends(get_tenant_context)):
     """Only owner and managers can modify resources"""
     if ctx.user.role not in [UserRole.OWNER, UserRole.MANAGER, "owner", "manager"]:

@@ -52,6 +52,22 @@ class SaaSPaymentStatus(str, enum.Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+class RepairStatus(str, enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    REJECTED = "rejected"
+
+class ComplaintStatus(str, enum.Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+
+class ProofStatus(str, enum.Enum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
 class SaaSPaymentType(str, enum.Enum):
     PLAN = "plan"
     MODULE = "module"
@@ -80,6 +96,8 @@ class InvoiceStatus(str, enum.Enum):
     PAID = "PAID"
     OVERDUE = "OVERDUE"
     CANCELLED = "CANCELLED"
+    WAITING_VERIFY = "WAITING_VERIFY"
+    REJECTED = "REJECTED"
 
 class PaymentMethod(str, enum.Enum):
     CASH = "CASH"
@@ -605,3 +623,70 @@ class AuditLog(Base):
     new_values = Column(JSON)
     ip_address = Column(String(45))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+# --- Tenant Portal Models ---
+
+class TenantOTP(Base):
+    __tablename__ = "tenant_otps"
+    
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    email = Column(String(255), index=True, nullable=True)
+    phone = Column(String(20), index=True, nullable=True)
+    otp_code = Column(String(6), nullable=False)
+    expired_at = Column(DateTime(timezone=True), nullable=False)
+    verified = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class PaymentProof(Base):
+    __tablename__ = "payment_proofs"
+    
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    invoice_id = Column(UUID(as_uuid=False), ForeignKey("invoices.id"), nullable=False, index=True)
+    image_url = Column(String(500), nullable=False)
+    note = Column(Text, nullable=True)
+    status = Column(Enum(ProofStatus), default=ProofStatus.PENDING, nullable=False)
+    uploaded_at = Column(DateTime(timezone=True), server_default=func.now())
+    verified_by = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=True)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+
+    organization = relationship("Organization")
+    invoice = relationship("Invoice")
+
+class RepairRequest(Base):
+    __tablename__ = "repair_requests"
+    
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    contract_id = Column(UUID(as_uuid=False), ForeignKey("contracts.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(Enum(RepairStatus), default=RepairStatus.PENDING, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    organization = relationship("Organization")
+    contract = relationship("Contract")
+
+class RepairRequestImage(Base):
+    __tablename__ = "repair_request_images"
+    
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    repair_request_id = Column(UUID(as_uuid=False), ForeignKey("repair_requests.id"), nullable=False, index=True)
+    image_url = Column(String(500), nullable=False)
+
+    repair_request = relationship("RepairRequest")
+
+class Complaint(Base):
+    __tablename__ = "complaints"
+    
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    contract_id = Column(UUID(as_uuid=False), ForeignKey("contracts.id"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(Enum(ComplaintStatus), default=ComplaintStatus.PENDING, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    organization = relationship("Organization")
+    contract = relationship("Contract")

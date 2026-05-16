@@ -38,6 +38,7 @@ export default function MeterReadingsPage() {
   const [boardingHouses, setBoardingHouses] = useState<BoardingHouse[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
   const [contracts, setContracts] = useState<Contract[]>([])
+  const [tenants, setTenants] = useState<any[]>([])
   const [readings, setReadings] = useState<MeterReading[]>([])
   const [selectedHouseId, setSelectedHouseId] = useState('')
   const [form, setForm] = useState(emptyForm)
@@ -63,6 +64,13 @@ export default function MeterReadingsPage() {
     return `${house?.name || 'Khu trọ'} - Phòng ${room.room_number}`
   }
 
+  const getTenantName = (roomId: string) => {
+    const contract = contracts.find((c) => c.room_id === roomId && c.status === 'ACTIVE')
+    if (!contract) return '-'
+    const tenant = tenants.find((t) => t.id === contract.tenant_id)
+    return tenant ? tenant.full_name : '-'
+  }
+
   const filteredReadings = readings.filter(item => {
     if (!globalSearchQuery) return true
     const q = globalSearchQuery.toLowerCase()
@@ -80,16 +88,18 @@ export default function MeterReadingsPage() {
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const [housesRes, roomsRes, contractsRes, readingsRes] = await Promise.all([
+      const [housesRes, roomsRes, contractsRes, readingsRes, tenantsRes] = await Promise.all([
         api.getBoardingHouses({ size: 100 }),
         api.getRooms({ size: 100 }),
         api.getContracts({ size: 100 }),
         api.getMeterReadings({ size: 100, mode: viewMode }),
+        api.getTenants({ size: 100 }),
       ])
       setBoardingHouses(housesRes.data.items)
       setRooms(roomsRes.data.items)
       setContracts(contractsRes.data.items)
       setReadings(readingsRes.data.items)
+      setTenants(tenantsRes.data.items)
     } catch {
       toast.error('Không tải được dữ liệu điện nước')
     } finally {
@@ -124,8 +134,9 @@ export default function MeterReadingsPage() {
       setForm(emptyForm)
       setEditingId(null)
       await loadData()
-    } catch {
-      toast.error('Không lưu được chỉ số')
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Không lưu được chỉ số'
+      toast.error(msg)
     } finally {
       setIsSaving(false)
     }
@@ -300,6 +311,7 @@ export default function MeterReadingsPage() {
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase text-slate-500 dark:bg-slate-900">
               <tr>
                 <th className="px-4 py-3">Phòng</th>
+                <th className="px-4 py-3">Người đại diện</th>
                 <th className="px-4 py-3">Kỳ ghi</th>
                 <th className="px-4 py-3">Điện cũ → mới</th>
                 <th className="px-4 py-3">Nước cũ → mới</th>
@@ -318,6 +330,7 @@ export default function MeterReadingsPage() {
                 filteredReadings.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                     <td className="px-4 py-3 font-semibold">{roomLabel(item.room_id)}</td>
+                    <td className="px-4 py-3">{getTenantName(item.room_id)}</td>
                     <td className="px-4 py-3">{item.reading_month}/{item.reading_year}</td>
                     <td className="px-4 py-3 tabular-nums">{item.electricity_previous} → <span className="font-semibold text-emerald-600 dark:text-emerald-400">{item.electricity_current}</span></td>
                     <td className="px-4 py-3 tabular-nums">{item.water_previous} → <span className="font-semibold text-blue-600 dark:text-blue-400">{item.water_current}</span></td>

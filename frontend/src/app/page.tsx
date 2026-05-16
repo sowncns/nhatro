@@ -27,7 +27,13 @@ export default function HomePage() {
             href="/login"
             className="rounded-xl bg-white px-6 py-3 text-base font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 hover:bg-slate-50"
           >
-            Đăng nhập
+            Đăng nhập Chủ Trọ
+          </Link>
+          <Link
+            href="/portal/login"
+            className="rounded-xl bg-white px-6 py-3 text-base font-semibold text-blue-700 shadow-sm ring-1 ring-inset ring-blue-200 hover:bg-blue-50"
+          >
+            Đăng nhập Người Thuê
           </Link>
           <Link
             href="/billing"

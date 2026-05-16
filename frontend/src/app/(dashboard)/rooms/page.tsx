@@ -34,7 +34,7 @@ function roomStatusLabel(status: string) {
     occupied: 'Đã thuê',
     maintenance: 'Bảo trì',
   }
-  return map[status] || status
+  return map[status.toLowerCase()] || status
 }
 
 export default function RoomsPage() {
