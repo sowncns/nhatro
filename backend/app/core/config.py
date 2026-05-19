@@ -4,7 +4,6 @@ from typing import List
 import secrets
 from pathlib import Path
 
-import os
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -17,7 +16,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = ""
     DATABASE_SSL_MODE: str = "disable"
     DATABASE_USE_NULL_POOL: bool = False
     DATABASE_DISABLE_PREPARED_STATEMENT_CACHE: bool = True
@@ -32,7 +31,7 @@ class Settings(BaseSettings):
     def database_url_required(cls, value: str) -> str:
         if not value:
             raise ValueError(
-                "DATABASE_URL is required. Use your Supabase PostgreSQL connection string."
+                "DATABASE_URL is required. Set it as an environment variable on Railway."
             )
         return value
 
@@ -51,31 +50,31 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.CORS_ORIGINS.split(",")]
 
     # Email
-    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
-    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER: str = os.getenv("SMTP_USER", "")
-    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
-    EMAIL_FROM: str = os.getenv("EMAIL_FROM", "noreply@nhatro.vn")
-    RESEND_API_KEY: str = os.getenv("RESEND_API_KEY", "")
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    EMAIL_FROM: str = "noreply@nhatro.vn"
+    RESEND_API_KEY: str = ""
 
     # Cloudinary
-    CLOUDINARY_CLOUD_NAME: str = os.getenv("CLOUDINARY_CLOUD_NAME", "")
-    CLOUDINARY_API_KEY: str = os.getenv("CLOUDINARY_API_KEY", "")
-    CLOUDINARY_API_SECRET: str = os.getenv("CLOUDINARY_API_SECRET", "")
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
 
     # Stripe
-    STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "")
-    STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
 
     # PayOS
-    PAYOS_CLIENT_ID: str = os.getenv("PAYOS_CLIENT_ID", "")
-    PAYOS_API_KEY: str = os.getenv("PAYOS_API_KEY", "")
-    PAYOS_CHECKSUM_KEY: str = os.getenv("PAYOS_CHECKSUM_KEY", "")
-    PAYOS_RETURN_URL: str = os.getenv("PAYOS_RETURN_URL", "http://localhost:3000/payment/success")
-    PAYOS_CANCEL_URL: str = os.getenv("PAYOS_CANCEL_URL", "http://localhost:3000/payment/cancel")
+    PAYOS_CLIENT_ID: str = ""
+    PAYOS_API_KEY: str = ""
+    PAYOS_CHECKSUM_KEY: str = ""
+    PAYOS_RETURN_URL: str = "http://localhost:3000/payment/success"
+    PAYOS_CANCEL_URL: str = "http://localhost:3000/payment/cancel"
 
     # VietQR
-    VIETQR_BASE_URL: str = os.getenv("VIETQR_BASE_URL", "https://img.vietqr.io/image")
+    VIETQR_BASE_URL: str = "https://img.vietqr.io/image"
 
     # Subscription limits
     FREE_PLAN_MAX_ROOMS: int = 10
@@ -83,10 +82,11 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
+        env_file_encoding="utf-8",
         case_sensitive=True,
-        extra="ignore"
-)
+        extra="ignore",
+    )
 
 
-print("DATABASE_URL =", os.getenv("DATABASE_URL"))
 settings = Settings()
+
