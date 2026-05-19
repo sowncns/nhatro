@@ -57,7 +57,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const stored = localStorage.getItem('nhatro-theme')
-    const shouldUseDark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+    const shouldUseDark = stored ? stored === 'dark' : true  // Mặc định dark
     setIsDark(shouldUseDark)
     document.documentElement.classList.toggle('dark', shouldUseDark)
   }, [])
