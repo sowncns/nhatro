@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Clock, Loader2, MessageSquare, Plus, Tool, X } from 'lucide-react'
+import { CheckCircle2, Clock, Loader2, MessageSquare, Plus, Wrench, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 import api from '@/services/api'
