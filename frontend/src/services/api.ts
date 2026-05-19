@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'nhatro-production.up.railway.app'
 
 class ApiClient {
   private client: AxiosInstance
