@@ -43,11 +43,11 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100">
       <div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
         <section className="flex items-center justify-center px-6 py-10 sm:px-10">
-          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8 dark:border-slate-800 dark:bg-slate-900">
+            <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-white">
               <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-600 text-white">
                 <Building2 className="h-5 w-5" aria-hidden="true" />
               </span>
@@ -55,15 +55,15 @@ export default function LoginPage() {
             </Link>
 
             <div className="mt-8">
-              <h1 className="text-2xl font-bold tracking-normal text-slate-950">Đăng nhập</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
+              <h1 className="text-2xl font-bold tracking-normal text-slate-950 dark:text-white">Đăng nhập</h1>
+              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">
                 Quay lại bảng điều khiển để quản lý phòng, khách thuê và hóa đơn.
               </p>
             </div>
 
             <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-800">
+                <label htmlFor="email" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
                   Email
                 </label>
                 <div className="relative mt-2">
@@ -76,7 +76,7 @@ export default function LoginPage() {
                     required
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
+                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="you@example.com"
                     tabIndex={1}
                   />
@@ -85,7 +85,7 @@ export default function LoginPage() {
 
               <div>
                 <div className="flex items-center justify-between gap-3">
-                  <label htmlFor="password" className="block text-sm font-medium text-slate-800">
+                  <label htmlFor="password" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
                     Mật khẩu
                   </label>
                   <Link href="/" className="text-sm font-medium text-emerald-700 hover:text-emerald-800">
@@ -102,7 +102,7 @@ export default function LoginPage() {
                     required
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
+                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="Nhập mật khẩu"
                     tabIndex={2}
                   />
@@ -128,16 +128,16 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <p className="mt-6 text-center text-sm text-slate-600">
+            <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
               Chưa có tài khoản?{' '}
               <Link href="/register" className="font-semibold text-emerald-700 hover:text-emerald-800">
                 Đăng ký ngay
               </Link>
             </p>
 
-            <div className="mt-6 border-t border-slate-200 pt-6 text-center">
-              <p className="text-sm text-slate-600 mb-3">Bạn là người thuê trọ?</p>
-              <Link href="/portal/login" className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50">
+            <div className="mt-6 border-t border-slate-200 pt-6 text-center dark:border-slate-800">
+              <p className="text-sm text-slate-600 mb-3 dark:text-slate-400">Bạn là người thuê trọ?</p>
+              <Link href="/portal/login" className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
                 Truy cập Portal Người Thuê
               </Link>
             </div>

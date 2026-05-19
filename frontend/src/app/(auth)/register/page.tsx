@@ -64,11 +64,11 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="min-h-screen bg-stone-50 text-slate-950">
+    <main className="min-h-screen bg-stone-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100">
       <div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
         <section className="flex items-center justify-center px-6 py-10 sm:px-10">
-          <div className="w-full max-w-xl rounded-lg border border-stone-200 bg-white p-6 shadow-sm sm:p-8">
-            <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 lg:hidden">
+          <div className="w-full max-w-xl rounded-lg border border-stone-200 bg-white p-6 shadow-sm sm:p-8 dark:border-slate-800 dark:bg-slate-900">
+            <Link href="/" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 lg:hidden dark:text-white">
               <span className="flex h-9 w-9 items-center justify-center rounded-md bg-emerald-600 text-white">
                 <Building2 className="h-5 w-5" aria-hidden="true" />
               </span>
@@ -76,15 +76,15 @@ export default function RegisterPage() {
             </Link>
 
             <div className="mt-8 lg:mt-0">
-              <h2 className="text-2xl font-bold tracking-normal text-slate-950">Đăng ký tài khoản</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
+              <h2 className="text-2xl font-bold tracking-normal text-slate-950 dark:text-white">Đăng ký tài khoản</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">
                 Nhập thông tin cơ bản để tạo tài khoản quản lý nhà trọ.
               </p>
             </div>
 
             <form className="mt-8 grid gap-5 sm:grid-cols-2" onSubmit={handleSubmit}>
               <div>
-                <label htmlFor="fullName" className="block text-sm font-medium text-slate-800">
+                <label htmlFor="fullName" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
                   Họ và tên
                 </label>
                 <div className="relative mt-2">
@@ -97,7 +97,7 @@ export default function RegisterPage() {
                     required
                     value={fullName}
                     onChange={(event) => setFullName(event.target.value)}
-                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
+                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="Nguyễn Văn A"
                     tabIndex={1}
                   />
@@ -105,7 +105,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label htmlFor="organizationName" className="block text-sm font-medium text-slate-800">
+                <label htmlFor="organizationName" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
                   Tên khu trọ / công ty
                 </label>
                 <div className="relative mt-2">
@@ -117,7 +117,7 @@ export default function RegisterPage() {
                     required
                     value={organizationName}
                     onChange={(event) => setOrganizationName(event.target.value)}
-                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
+                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="Nhà trọ Bình An"
                     tabIndex={2}
                   />
@@ -125,7 +125,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-slate-800">
+                <label htmlFor="email" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
                   Email
                 </label>
                 <div className="relative mt-2">
@@ -138,7 +138,7 @@ export default function RegisterPage() {
                     required
                     value={email}
                     onChange={(event) => setEmail(event.target.value)}
-                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
+                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="you@example.com"
                     tabIndex={3}
                   />
@@ -146,7 +146,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-slate-800">
+                <label htmlFor="phone" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
                   Số điện thoại
                 </label>
                 <div className="relative mt-2">
@@ -158,7 +158,7 @@ export default function RegisterPage() {
                     autoComplete="tel"
                     value={phone}
                     onChange={(event) => setPhone(event.target.value)}
-                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
+                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="0901234567"
                     tabIndex={4}
                   />
@@ -166,7 +166,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-medium text-slate-800">
+                <label htmlFor="password" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
                   Mật khẩu
                 </label>
                 <div className="relative mt-2">
@@ -179,7 +179,7 @@ export default function RegisterPage() {
                     required
                     value={password}
                     onChange={(event) => setPassword(event.target.value)}
-                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
+                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="Tối thiểu 8 ký tự"
                     tabIndex={5}
                   />
@@ -195,7 +195,7 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-800">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
                   Xác nhận mật khẩu
                 </label>
                 <div className="relative mt-2">
@@ -208,7 +208,7 @@ export default function RegisterPage() {
                     required
                     value={confirmPassword}
                     onChange={(event) => setConfirmPassword(event.target.value)}
-                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15"
+                    className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="Nhập lại mật khẩu"
                     tabIndex={6}
                   />
@@ -226,7 +226,7 @@ export default function RegisterPage() {
               </button>
             </form>
 
-            <p className="mt-6 text-center text-sm text-slate-600">
+            <p className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
               Đã có tài khoản?{' '}
               <Link href="/login" className="font-semibold text-emerald-700 hover:text-emerald-800">
                 Đăng nhập
