@@ -57,6 +57,19 @@ type Tenant = {
   full_name: string
 }
 
+type PendingPayment = {
+  id: string
+  invoice_id: string
+  contract_id?: string
+  amount: number
+  payment_method: string
+  payment_date?: string
+  proof_image_url?: string
+  notes?: string
+  created_at?: string
+  proof_id?: string
+}
+
 const now = new Date()
 
 function statusLabel(invoice: Invoice) {
@@ -82,6 +95,10 @@ export default function InvoicesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingManual, setIsSavingManual] = useState(false)
   const [isGeneratingAuto, setIsGeneratingAuto] = useState(false)
+  const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([])
+  const [previewProof, setPreviewProof] = useState<string>('')
+  const [rejectPaymentId, setRejectPaymentId] = useState<string>('')
+  const [rejectReason, setRejectReason] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'active' | 'history' | 'archived'>('active')
   const { globalSearchQuery } = useSearchStore()
@@ -136,18 +153,35 @@ export default function InvoicesPage() {
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const [housesRes, roomsRes, invoicesRes, orgRes, tenantsRes] = await Promise.all([
+      const [housesRes, roomsRes, invoicesRes, orgRes, tenantsRes, pendingRes] = await Promise.allSettled([
         api.getBoardingHouses({ size: 100 }),
         api.getRooms({ size: 100 }),
         api.getInvoices({ size: 100, mode: viewMode }),
         api.getOrganization(),
-        api.getTenants({ size: 100 })
+        api.getTenants({ size: 100 }),
+        api.getPendingPayments()
       ])
-      setBoardingHouses(housesRes.data.items)
-      setRooms(roomsRes.data.items)
-      setInvoices(invoicesRes.data.items)
-      setOrganization(orgRes.data)
-      setTenants(tenantsRes.data.items)
+
+      if (housesRes.status === 'fulfilled') setBoardingHouses(housesRes.value.data.items)
+      if (roomsRes.status === 'fulfilled') setRooms(roomsRes.value.data.items)
+      if (invoicesRes.status === 'fulfilled') setInvoices(invoicesRes.value.data.items)
+      if (orgRes.status === 'fulfilled') setOrganization(orgRes.value.data)
+      if (tenantsRes.status === 'fulfilled') setTenants(tenantsRes.value.data.items)
+      if (pendingRes.status === 'fulfilled') setPendingPayments(pendingRes.value.data || [])
+      else {
+        console.error('Pending payments load failed:', pendingRes.reason)
+        setPendingPayments([])
+      }
+
+      if (
+        housesRes.status === 'rejected' ||
+        roomsRes.status === 'rejected' ||
+        invoicesRes.status === 'rejected' ||
+        orgRes.status === 'rejected' ||
+        tenantsRes.status === 'rejected'
+      ) {
+        toast.error('Một phần dữ liệu hóa đơn tải thất bại')
+      }
     } catch {
       toast.error('Không tải được hóa đơn')
     } finally {
@@ -299,6 +333,35 @@ export default function InvoicesPage() {
       loadData()
     } catch {
       toast.error('Lỗi khi duyệt hóa đơn')
+    }
+  }
+
+  const handleConfirmPendingPayment = async (invoiceId: string) => {
+    try {
+      await api.approveInvoice(invoiceId)
+      toast.success('Đã xác nhận thanh toán thành công')
+      setPreviewProof('')
+      await loadData()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi khi xác nhận thanh toán')
+    }
+  }
+
+  const handleRejectPendingPayment = async () => {
+    if (!rejectPaymentId || !rejectReason.trim()) {
+      toast.error('Vui lòng nhập lý do từ chối')
+      return
+    }
+
+    try {
+      await api.rejectInvoiceProof(rejectPaymentId, rejectReason)
+      toast.success('Đã từ chối minh chứng thanh toán')
+      setRejectPaymentId('')
+      setRejectReason('')
+      setPreviewProof('')
+      await loadData()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi khi từ chối thanh toán')
     }
   }
 
@@ -506,6 +569,84 @@ export default function InvoicesPage() {
         description="Hóa đơn được tính tự động từ giá phòng riêng, chỉ số điện nước hằng tháng và phí dịch vụ. Bạn hãy kiểm tra lại trước khi gửi hoặc in hóa đơn."
         action={<PrimaryButton onClick={() => setShowForm(true)}><Plus className="h-4 w-4" /> Tạo hóa đơn thủ công</PrimaryButton>}
       />
+
+      {pendingPayments.length > 0 && (
+        <Card className="p-5 border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-semibold text-amber-900 dark:text-amber-200">Chờ xác nhận thanh toán</h2>
+              <p className="text-sm text-amber-700 dark:text-amber-300">Người thuê đã chuyển khoản và gửi minh chứng. Hãy kiểm tra rồi xác nhận.</p>
+            </div>
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-700 dark:bg-amber-900/60 dark:text-amber-200">
+              {pendingPayments.length} yêu cầu
+            </span>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {pendingPayments.map((payment) => {
+              const invoice = invoices.find((inv) => inv.id === payment.invoice_id)
+              return (
+                <div key={payment.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-slate-900 dark:text-slate-100">{invoice?.invoice_number || 'Hóa đơn'}</div>
+                      <div className="text-sm text-slate-500">{invoice ? `Kỳ ${invoice.billing_month}/${invoice.billing_year}` : 'Không rõ kỳ'}</div>
+                    </div>
+                    <span className="rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-semibold text-yellow-700 dark:bg-yellow-900/60 dark:text-yellow-200">
+                      Chờ duyệt
+                    </span>
+                  </div>
+
+                  <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
+                    <div className="flex justify-between">
+                      <span>Số tiền</span>
+                      <span className="font-semibold text-blue-600 dark:text-blue-400">{formatCurrency(payment.amount)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Phương thức</span>
+                      <span>{payment.payment_method}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Ngày gửi</span>
+                      <span>{payment.created_at ? new Date(payment.created_at).toLocaleString('vi-VN') : '-'}</span>
+                    </div>
+                  </div>
+
+                  {payment.proof_image_url && (
+                    <button
+                      type="button"
+                      onClick={() => setPreviewProof(payment.proof_image_url || '')}
+                      className="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                    >
+                      Xem minh chứng
+                    </button>
+                  )}
+
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleConfirmPendingPayment(payment.invoice_id)}
+                      className="flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                    >
+                      Xác nhận
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRejectPaymentId(payment.invoice_id)
+                        setRejectReason('')
+                      }}
+                      className="flex-1 rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950/30"
+                    >
+                      Từ chối
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
 
       {showForm && (
         <Card className="p-5">
@@ -753,64 +894,85 @@ export default function InvoicesPage() {
         </div>
       </Card>
 
+      {previewProof && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="relative max-h-[90vh] max-w-4xl overflow-auto rounded-2xl bg-white p-4 shadow-2xl dark:bg-slate-900">
+            <button
+              type="button"
+              onClick={() => setPreviewProof('')}
+              className="absolute right-3 top-3 rounded-lg bg-slate-100 px-2 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200"
+            >
+              Đóng
+            </button>
+            <img src={previewProof} alt="Minh chứng thanh toán" className="max-h-[80vh] w-auto rounded-xl object-contain" />
+          </div>
+        </div>
+      )}
+
+      {rejectPaymentId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
+            <h3 className="text-lg font-semibold mb-3">Từ chối minh chứng thanh toán</h3>
+            <p className="text-sm text-slate-500 mb-4">Nhập lý do để người thuê biết và gửi lại chứng từ đúng.</p>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 outline-none focus:border-rose-500 focus:ring-2 focus:ring-rose-500/15 dark:border-slate-800 dark:bg-slate-950"
+              placeholder="Ví dụ: Ảnh mờ, sai số tiền, chưa đúng nội dung chuyển khoản..."
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRejectPaymentId('')
+                  setRejectReason('')
+                }}
+                className="h-10 rounded-xl border border-slate-200 px-4 text-sm font-semibold dark:border-slate-800"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleRejectPendingPayment}
+                className="h-10 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white hover:bg-rose-700"
+              >
+                Xác nhận từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {payId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-900">
-            <h3 className="font-semibold text-lg mb-4">Xác nhận thu tiền</h3>
+            <h3 className="font-semibold text-lg mb-4">Xác nhận thu tiền mặt/chuyển khoản trực tiếp</h3>
             <form onSubmit={handlePay}>
-              <div className="space-y-4">
+              {/* <div className="space-y-4">
                 <label className="block text-sm font-medium">
                   Phương thức thanh toán
-                  <select 
-                    value={payMethod} 
-                    onChange={e => {
-                      setPayMethod(e.target.value)
-                      if (e.target.value === 'qr') {
-                        const inv = invoices.find(i => i.id === payId)
-                        if (inv) setPayAmount(String(inv.total_amount - inv.paid_amount))
-                      }
-                    }}
+                  <select
+                    value={payMethod}
+                    onChange={e => setPayMethod(e.target.value)}
                     className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950"
                   >
                     <option value="cash">Tiền mặt</option>
-                    <option value="qr">Chuyển khoản (QR)</option>
+                    <option value="bank_transfer">Chuyển khoản</option>
                   </select>
                 </label>
                 <label className="block text-sm font-medium">
                   Số tiền thu
-                  <input 
-                    required 
-                    type="number" 
-                    min="1" 
-                    value={payAmount} 
-                    onChange={e => setPayAmount(e.target.value)} 
-                    disabled={payMethod === 'qr'}
-                    className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950" 
+                  <input
+                    required
+                    type="number"
+                    min="1"
+                    value={payAmount}
+                    onChange={e => setPayAmount(e.target.value)}
+                    className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950"
                   />
-                  {payMethod === 'qr' && (
-                    <div className="mt-4 flex flex-col items-center justify-center rounded-2xl bg-slate-50 p-4 dark:bg-slate-950 border border-slate-100 dark:border-slate-800">
-                      {invoices.find(i => i.id === payId)?.qr_code_url ? (
-                        <>
-                          <img 
-                            src={invoices.find(i => i.id === payId)?.qr_code_url} 
-                            alt="VietQR" 
-                            className="h-48 w-48 rounded-lg shadow-sm"
-                          />
-                          <p className="mt-2 text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Quét mã để thanh toán</p>
-                        </>
-                      ) : (
-                        <div className="text-center py-8">
-                          <p className="text-sm text-amber-600 font-medium">Chưa có mã QR</p>
-                          <p className="text-[11px] text-slate-500 mt-1">Vui lòng kiểm tra lại cấu hình ngân hàng trong cài đặt</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {payMethod === 'qr' && (
-                    <p className="mt-2 text-[11px] text-amber-600 italic text-center">* Chuyển khoản QR bắt buộc thanh toán đủ 100%</p>
-                  )}
                 </label>
-              </div>
+              </div> */}
               <div className="mt-6 flex gap-2 justify-end">
                 <button type="button" onClick={() => setPayId('')} className="h-10 rounded-xl px-4 text-sm font-semibold border border-slate-200 dark:border-slate-800">Hủy</button>
                 <button type="submit" className="h-10 rounded-xl px-5 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700">Xác nhận đã thu</button>

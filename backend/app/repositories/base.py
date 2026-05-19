@@ -36,13 +36,19 @@ class BaseRepository(Generic[ModelType]):
             if model_name == "Contract":
                 query = query.where(Contract.status.in_([ContractStatus.ACTIVE, ContractStatus.DRAFT]))
             elif model_name == "Invoice":
-                query = query.where(Invoice.status.in_([InvoiceStatus.DRAFT, InvoiceStatus.SENT, InvoiceStatus.OVERDUE]))
+                query = query.where(Invoice.status.in_([InvoiceStatus.DRAFT, InvoiceStatus.SENT, InvoiceStatus.OVERDUE, InvoiceStatus.WAITING_VERIFY]))
             elif model_name == "MaintenanceRequest":
                 query = query.where(MaintenanceRequest.status.in_([MaintenanceStatus.PENDING, MaintenanceStatus.IN_PROGRESS]))
             elif model_name == "Tenant":
                 query = query.where(Tenant.is_active == True)
             elif model_name == "MeterReading":
-                query = query.where(MeterReading.is_locked == False)
+                # Chỉ hiển thị chỉ số của tháng hiện tại
+                from datetime import datetime
+                now = datetime.now()
+                query = query.where(
+                    MeterReading.reading_month == now.month,
+                    MeterReading.reading_year == now.year
+                )
         
         elif mode == "history":
             if model_name == "Contract":

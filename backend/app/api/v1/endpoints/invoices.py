@@ -1,6 +1,7 @@
 """Invoices Endpoints"""
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import Optional
 from app.database.session import get_db
 from app.core.deps import get_tenant_context, TenantContext
@@ -37,18 +38,35 @@ async def list_invoices(
     total = await repo.count(filters, mode=mode)
     items = await repo.get_all(skip=(page - 1) * size, limit=size, filters=filters,
                                 order_by=Invoice.created_at.desc(), mode=mode)
-    # Fetch contracts to get representative_name
+
+    # Fetch tenant names from contracts
     contract_ids = [inv.contract_id for inv in items if inv.contract_id]
-    contracts_map = {}
+    tenant_names_map = {}
     if contract_ids:
-        from app.database.models import Contract
-        contract_result = await db.execute(select(Contract).where(Contract.id.in_(contract_ids)))
-        contracts_map = {c.id: c.representative_name for c in contract_result.scalars().all()}
-        
+        from app.database.models import Contract, Tenant
+        contract_result = await db.execute(
+            select(Contract).where(Contract.id.in_(contract_ids))
+        )
+        contracts = contract_result.scalars().all()
+
+        # Get tenant IDs from contracts
+        tenant_ids = [c.tenant_id for c in contracts if c.tenant_id]
+        if tenant_ids:
+            tenant_result = await db.execute(
+                select(Tenant).where(Tenant.id.in_(tenant_ids))
+            )
+            tenants = {t.id: t.full_name for t in tenant_result.scalars().all()}
+
+            # Map contract_id to tenant name
+            for c in contracts:
+                if c.tenant_id:
+                    tenant_names_map[c.id] = tenants.get(c.tenant_id, "N/A")
+
     formatted_items = []
     for inv in items:
         resp = InvoiceResponse.model_validate(inv)
-        resp.representative_name = contracts_map.get(inv.contract_id, "N/A")
+        if hasattr(resp, 'representative_name'):
+            resp.representative_name = tenant_names_map.get(inv.contract_id, "N/A")
         formatted_items.append(resp)
         
     return PaginatedResponse(
@@ -64,8 +82,23 @@ async def create_invoice(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    from sqlalchemy import select
+    from app.models.models import Contract, ContractStatus
+    
     service = InvoiceService(db, ctx.organization_id)
-    return await service.create_invoice(data)
+    
+    # Automatically find active contract for this room
+    contract_result = await db.execute(
+        select(Contract).where(
+            Contract.room_id == data.room_id,
+            Contract.organization_id == ctx.organization_id,
+            Contract.status == ContractStatus.ACTIVE,
+        ).order_by(Contract.created_at.desc()).limit(1)
+    )
+    contract = contract_result.scalar_one_or_none()
+    contract_id = contract.id if contract else None
+    
+    return await service.create_invoice(data, contract_id=contract_id)
 
 
 @router.post("/auto-generate")
@@ -128,39 +161,87 @@ async def approve_invoice(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.database.models import PaymentProof, ProofStatus, Invoice
+    from app.database.models import PaymentProof, ProofStatus, Invoice, InvoiceStatus
     import datetime
     from datetime import timezone
     from fastapi import HTTPException
-    
+
     # Find the invoice
     repo = BaseRepository(Invoice, db, ctx.organization_id)
     invoice = await repo.get(invoice_id)
     if not invoice:
         raise HTTPException(status_code=404, detail="Không tìm thấy hóa đơn")
-        
+
     # Find the pending proof
     query = select(PaymentProof).where(
         PaymentProof.invoice_id == invoice_id,
+        PaymentProof.organization_id == ctx.organization_id,
         PaymentProof.status == ProofStatus.PENDING
     )
     result = await db.execute(query)
     proof = result.scalar_one_or_none()
-    
-    if proof:
-        proof.status = ProofStatus.APPROVED
-        proof.verified_by = ctx.user.id
-        proof.verified_at = datetime.datetime.now(timezone.utc)
-        
-    # Record payment
+
+    if not proof:
+        raise HTTPException(status_code=400, detail="Không có minh chứng nào đang chờ duyệt")
+
+    proof.status = ProofStatus.VERIFIED
+    proof.verified_by = ctx.user.id
+    proof.verified_at = datetime.datetime.now(timezone.utc)
+
+    # Record payment full remaining amount
     service = InvoiceService(db, ctx.organization_id)
-    # Pay full amount (or remaining amount!)
     remaining = invoice.total_amount - (invoice.paid_amount or 0)
     if remaining > 0:
         await service.record_payment(invoice_id, remaining, "BANK_TRANSFER", notes="Duyệt minh chứng từ khách thuê")
-        
+    else:
+        invoice.status = InvoiceStatus.PAID
+
     await db.commit()
-    return {"status": "success"}
+    return {"status": "success", "message": "Đã duyệt minh chứng và ghi nhận thanh toán"}
+
+
+@router.post("/{invoice_id}/reject-proof")
+async def reject_invoice_proof(
+    invoice_id: str,
+    reason: str = Query(...),
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reject payment proof and return invoice to active unpaid state"""
+    from app.database.models import PaymentProof, ProofStatus, Invoice, InvoiceStatus
+    import datetime
+    from datetime import timezone
+    from fastapi import HTTPException
+
+    # Find the invoice
+    repo = BaseRepository(Invoice, db, ctx.organization_id)
+    invoice = await repo.get(invoice_id)
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hóa đơn")
+
+    # Find the pending proof
+    query = select(PaymentProof).where(
+        PaymentProof.invoice_id == invoice_id,
+        PaymentProof.organization_id == ctx.organization_id,
+        PaymentProof.status == ProofStatus.PENDING
+    )
+    result = await db.execute(query)
+    proof = result.scalar_one_or_none()
+
+    if not proof:
+        raise HTTPException(status_code=400, detail="Không có minh chứng nào đang chờ duyệt")
+
+    # Update proof status to REJECTED
+    proof.status = ProofStatus.REJECTED
+    proof.verified_by = ctx.user.id
+    proof.verified_at = datetime.datetime.now(timezone.utc)
+    proof.note = f"Bị từ chối: {reason}"
+
+    # Return invoice back to SENT (active unpaid)
+    invoice.status = InvoiceStatus.SENT
+
+    await db.commit()
+    return {"status": "success", "message": f"Đã từ chối minh chứng. Lý do: {reason}"}
 
 @router.put("/{invoice_id}", response_model=InvoiceResponse)
 async def update_invoice(

@@ -25,12 +25,12 @@ export default function TenantLogin() {
       // Save token to localStorage
       localStorage.setItem('tenant_token', data.access_token);
       localStorage.setItem('access_token', data.access_token);
-      
-      if (data.requires_room_selection) {
-        router.push('/portal/rooms');
-      } else {
-        router.push('/portal');
-      }
+      router.push('/portal');
+      // if (data.requires_room_selection) {
+      //   router.push('/portal/rooms');
+      // } else {
+      //   router.push('/portal');
+      // }
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Có lỗi xảy ra');
     } finally {

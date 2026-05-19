@@ -47,6 +47,7 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
     @property
     def cors_origins_list(self) -> List[str]:

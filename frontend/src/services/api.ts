@@ -153,8 +153,8 @@ class ApiClient {
   tenantCreateRepairRequest = (data: { title: string; description: string; contract_id: string }) => this.client.post('/tenant/portal/repair-requests', data)
   tenantUploadProof = (invoiceId: string, file: File) => {
     const formData = new FormData()
-    formData.append('file', file)
-    return this.client.post(`/tenant/portal/invoices/${invoiceId}/proof`, formData, {
+    formData.append('proof_image', file)
+    return this.client.post(`/tenant/portal/invoices/${invoiceId}/payment-proof`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   }
@@ -165,6 +165,21 @@ class ApiClient {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
   }
+
+  // Subscription Management
+  getSubscriptionPlans = () => this.client.get('/subscription/plans')
+  getCurrentSubscription = () => this.client.get('/subscription/current')
+  getSubscriptionUsage = () => this.client.get('/subscription/usage')
+  getPaymentHistory = () => this.client.get('/subscription/payment-history')
+  upgradeSubscription = (data: { plan: string; payment_method: string }) => this.client.post('/subscription/upgrade', data)
+  activateSubscription = (paymentId: string) => this.client.post(`/subscription/activate/${paymentId}`)
+
+  // Landlord payment confirmation
+  getPendingPayments = () => this.client.get('/payments/pending')
+  confirmPendingPayment = (paymentId: string) => this.client.post(`/payments/${paymentId}/confirm`)
+  rejectPendingPayment = (paymentId: string, reason: string) => this.client.post(`/payments/${paymentId}/reject`, null, { params: { reason } })
+  approveInvoice = (invoiceId: string) => this.client.post(`/invoices/${invoiceId}/approve`)
+  rejectInvoiceProof = (invoiceId: string, reason: string) => this.client.post(`/invoices/${invoiceId}/reject-proof`, null, { params: { reason } })
 }
 
 export const api = new ApiClient()

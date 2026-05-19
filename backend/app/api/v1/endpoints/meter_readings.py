@@ -101,6 +101,7 @@ async def create_meter_reading(
                 MeterReading.organization_id == ctx.organization_id,
                 MeterReading.archived_at.is_(None)
             )
+        )
         existing_reading = existing_reading_result.scalars().first()
         
         if existing_reading:

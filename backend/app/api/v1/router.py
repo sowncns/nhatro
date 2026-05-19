@@ -16,6 +16,9 @@ from app.api.v1.endpoints import (
     payments,
     tenant_auth,
     tenant_portal,
+    debug,
+    subscription,
+    payos_webhook,
 )
 
 api_router = APIRouter()
@@ -34,4 +37,7 @@ api_router.include_router(payments.router, prefix="/payments", tags=["Payments"]
 api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api_router.include_router(billing.router, prefix="/billing", tags=["SaaS Billing"])
 api_router.include_router(maintenance.router, prefix="/maintenance", tags=["Maintenance"])
+api_router.include_router(subscription.router, prefix="/subscription", tags=["Subscription"])
+api_router.include_router(payos_webhook.router, prefix="/webhooks", tags=["Webhooks"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Platform Admin"])
+api_router.include_router(debug.router, prefix="", tags=["Debug"])  # Debug endpoint

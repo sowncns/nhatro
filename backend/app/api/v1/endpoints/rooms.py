@@ -60,6 +60,10 @@ async def create_room(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    # Check subscription limit before creating room
+    from app.core.subscription import check_room_limit
+    await check_room_limit(db, ctx.organization_id, ctx.organization)
+
     repo = BaseRepository(Room, db, ctx.organization_id)
     room_data = data.model_dump()
     billing_settings = ctx.organization.settings or {}

@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import api from '@/services/api';
 
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
+
 export default function TenantInvoiceDetail() {
   const [invoice, setInvoice] = useState<any>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -102,12 +105,12 @@ export default function TenantInvoiceDetail() {
           <div className="flex justify-between items-center mb-3">
             <h2 className="text-lg font-semibold text-gray-800">Kỳ {invoice.billing_month}/{invoice.billing_year}</h2>
             <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-              invoice.status === 'PAID' ? 'bg-green-50 text-green-600' :
-              invoice.status === 'WAITING_VERIFY' ? 'bg-yellow-50 text-yellow-600' :
+              invoice.status === 'PAID' || invoice.status === 'paid' ? 'bg-green-50 text-green-600' :
+              invoice.status === 'WAITING_VERIFY' || invoice.status === 'pending_confirmation' ? 'bg-yellow-50 text-yellow-600' :
               'bg-red-50 text-red-600'
             }`}>
-              {invoice.status === 'PAID' ? 'Đã thanh toán' :
-               invoice.status === 'WAITING_VERIFY' ? 'Chờ duyệt' :
+              {invoice.status === 'PAID' || invoice.status === 'paid' ? 'Đã thanh toán' :
+               invoice.status === 'WAITING_VERIFY' || invoice.status === 'pending_confirmation' ? 'Chờ duyệt' :
                'Chưa thanh toán'}
             </span>
           </div>
@@ -115,54 +118,93 @@ export default function TenantInvoiceDetail() {
           <div className="space-y-2 text-sm text-gray-600">
             <div className="flex justify-between">
               <span>Tiền phòng:</span>
-              <span className="font-medium">{(invoice.room_amount || 0).toLocaleString('vi-VN')} đ</span>
+              <span className="font-medium">{formatCurrency(invoice.room_charge || invoice.rent_amount || 0)}</span>
             </div>
             <div className="flex justify-between">
               <span>Tiền điện:</span>
-              <span>{(invoice.electricity_amount || 0).toLocaleString('vi-VN')} đ</span>
+              <span>{formatCurrency(invoice.electricity_charge || invoice.electricity_amount || 0)}</span>
             </div>
             <div className="flex justify-between">
               <span>Tiền nước:</span>
-              <span>{(invoice.water_amount || 0).toLocaleString('vi-VN')} đ</span>
+              <span>{formatCurrency(invoice.water_charge || invoice.water_amount || 0)}</span>
             </div>
-            {(invoice.service_amount || 0) > 0 && (
+            {(invoice.internet_charge || invoice.internet_amount || 0) > 0 && (
+              <div className="flex justify-between">
+                <span>Tiền mạng:</span>
+                <span>{formatCurrency(invoice.internet_charge || invoice.internet_amount || 0)}</span>
+              </div>
+            )}
+            {(invoice.parking_charge || invoice.parking_amount || 0) > 0 && (
+              <div className="flex justify-between">
+                <span>Tiền gửi xe:</span>
+                <span>{formatCurrency(invoice.parking_charge || invoice.parking_amount || 0)}</span>
+              </div>
+            )}
+            {(invoice.other_charges || invoice.other_amount || 0) > 0 && (
               <div className="flex justify-between">
                 <span>Dịch vụ khác:</span>
-                <span>{(invoice.service_amount || 0).toLocaleString('vi-VN')} đ</span>
+                <span>{formatCurrency(invoice.other_charges || invoice.other_amount || 0)}</span>
               </div>
             )}
             <div className="border-t pt-2 flex justify-between font-bold text-lg text-gray-900">
               <span>Tổng cộng:</span>
-              <span className="text-blue-600">{(invoice.total_amount || 0).toLocaleString('vi-VN')} đ</span>
+              <span className="text-blue-600">{formatCurrency(invoice.total_amount || 0)}</span>
             </div>
           </div>
         </div>
 
         {/* Payment Guide */}
-        {invoice.status !== 'PAID' && (
+        {invoice.status !== 'PAID' && invoice.status !== 'paid' && (
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
             <h2 className="text-lg font-semibold text-gray-800 mb-3">Hướng dẫn thanh toán</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Vui lòng chuyển khoản đúng số tiền trên vào tài khoản của chủ trọ.
+              Vui lòng chuyển khoản đúng số tiền trên vào tài khoản của chủ trọ bằng cách quét mã QR dưới đây hoặc chuyển khoản theo thông tin.
             </p>
-            
+
+            {/* Bank details info */}
+            {invoice.bank_info && (
+              <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg text-sm space-y-1 mb-4 border border-slate-100">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Ngân hàng:</span>
+                  <span className="font-semibold">{invoice.bank_info.bank_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Số tài khoản:</span>
+                  <span className="font-mono font-semibold">{invoice.bank_info.account_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Tên tài khoản:</span>
+                  <span className="font-semibold">{invoice.bank_info.account_name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Số tiền:</span>
+                  <span className="font-semibold text-blue-600">{formatCurrency(invoice.bank_info.amount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Nội dung chuyển khoản:</span>
+                  <span className="font-mono font-bold text-emerald-600">{invoice.bank_info.content}</span>
+                </div>
+              </div>
+            )}
+
             {/* VietQR Image */}
             {invoice.qr_code_url ? (
-              <div className="flex justify-center mb-4">
+              <div className="flex flex-col items-center justify-center mb-4">
                 <img
                   src={invoice.qr_code_url}
                   alt="VietQR"
                   className="w-64 h-64 object-contain border border-gray-200 rounded-lg"
                 />
+                <span className="text-xs text-slate-400 mt-2">Mở app ngân hàng quét mã QR để chuyển khoản nhanh</span>
               </div>
             ) : (
               <div className="bg-yellow-50 text-yellow-700 p-3 rounded-lg text-sm text-center mb-4">
-                Chưa có mã QR thanh toán. Vui lòng liên hệ chủ trọ.
+                Chưa có mã QR thanh toán. Vui lòng liên hệ chủ trọ để cấu hình thông tin ngân hàng.
               </div>
             )}
 
             {/* Upload Form */}
-            {invoice.status !== 'WAITING_VERIFY' && (
+            {invoice.status !== 'WAITING_VERIFY' && invoice.status !== 'pending_confirmation' && (
               <form onSubmit={handleUpload} className="space-y-3">
                 <label className="block text-sm font-medium text-gray-700">Gửi ảnh minh chứng (Biên lai)</label>
                 <input
@@ -181,10 +223,10 @@ export default function TenantInvoiceDetail() {
                 </button>
               </form>
             )}
-            
-            {invoice.status === 'WAITING_VERIFY' && (
-              <div className="bg-yellow-50 text-yellow-700 p-3 rounded-lg text-sm text-center">
-                Bạn đã gửi minh chứng. Vui lòng chờ chủ trọ xác nhận.
+
+            {(invoice.status === 'WAITING_VERIFY' || invoice.status === 'pending_confirmation') && (
+              <div className="bg-yellow-50 text-yellow-700 p-3 rounded-lg text-sm text-center font-medium">
+                Bạn đã gửi minh chứng thành công. Vui lòng chờ chủ trọ xác nhận.
               </div>
             )}
           </div>
