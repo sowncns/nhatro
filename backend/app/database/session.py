@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sess
 from sqlalchemy.pool import NullPool
 from app.core.config import settings
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-
+import ssl
 
 def _database_url_and_connect_args() -> tuple[str, dict]:
     parsed = urlsplit(settings.DATABASE_URL)
@@ -16,7 +16,12 @@ def _database_url_and_connect_args() -> tuple[str, dict]:
 
     connect_args = {}
     if ssl_mode and ssl_mode.lower() not in {"disable", "false", "0"}:
-        connect_args["ssl"] = True
+        # Tạo cấu hình SSL cho phép bỏ qua xác thực chứng chỉ self-signed công cộng
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        
+        connect_args["ssl"] = ssl_context
     if settings.DATABASE_DISABLE_PREPARED_STATEMENT_CACHE:
         connect_args["prepared_statement_cache_size"] = 0
 
