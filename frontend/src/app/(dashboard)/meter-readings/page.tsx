@@ -10,7 +10,7 @@ import { Card, PageHeader, PrimaryButton } from '../_components/ui'
 
 type Room = { id: string; room_number: string; boarding_house_id: string; status: string }
 type BoardingHouse = { id: string; name: string }
-type Contract = { id: string; room_id: string; status: string }
+type Contract = { id: string; room_id: string; tenant_id: string; status: string }
 type MeterReading = {
   id: string
   room_id: string

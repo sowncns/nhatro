@@ -16,7 +16,7 @@ export default function TenantLogin() {
     setError('');
     try {
       const isEmail = contact.includes('@');
-      const response = await api.client.post('/tenant/auth/login', {
+      const response = await api.tenantLogin({
         email: isEmail ? contact : undefined,
         phone: !isEmail ? contact : undefined,
       });

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, Crown, Zap, TrendingUp, Users, Home, AlertCircle, CreditCard, Clock } from 'lucide-react'
+import { Check, Crown, Zap, TrendingUp, Users, Home, AlertCircle, CreditCard, Clock, QrCode } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '@/services/api'
 import { Card } from '../_components/ui'

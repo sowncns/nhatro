@@ -143,8 +143,7 @@ class ApiClient {
 
   // Tenant Portal
   // OTP methods removed - using direct login instead
-  // tenantSendOtp = (data: { email?: string; phone?: string }) => this.client.post('/tenant/auth/send-otp', data)
-  // tenantVerifyOtp = (data: { email?: string; phone?: string; otp_code: string }) => this.client.post('/tenant/auth/verify-otp', data)
+  tenantLogin = (data: { email?: string; phone?: string }) => this.client.post('/tenant/auth/login', data)
   tenantGetRooms = () => this.client.get('/tenant/portal/rooms')
   tenantGetInvoices = () => this.client.get('/tenant/portal/invoices')
   tenantGetInvoice = (id: string) => this.client.get(`/tenant/portal/invoices/${id}`)
@@ -178,7 +177,6 @@ class ApiClient {
   getPendingPayments = () => this.client.get('/payments/pending')
   confirmPendingPayment = (paymentId: string) => this.client.post(`/payments/${paymentId}/confirm`)
   rejectPendingPayment = (paymentId: string, reason: string) => this.client.post(`/payments/${paymentId}/reject`, null, { params: { reason } })
-  approveInvoice = (invoiceId: string) => this.client.post(`/invoices/${invoiceId}/approve`)
   rejectInvoiceProof = (invoiceId: string, reason: string) => this.client.post(`/invoices/${invoiceId}/reject-proof`, null, { params: { reason } })
 }
 
