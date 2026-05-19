@@ -11,7 +11,7 @@ import { Card, PageHeader, PrimaryButton, StatusBadge } from '../_components/ui'
 import DateInput from '@/components/DateInput'
 
 type Room = { id: string; room_number: string; boarding_house_id: string; parking_fee?: number }
-type BoardingHouse = { id: string; name: string }
+type BoardingHouse = { id: string; name: string; address?: string }
 type Invoice = {
   id: string
   invoice_number: string
