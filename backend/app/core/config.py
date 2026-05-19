@@ -88,5 +88,29 @@ class Settings(BaseSettings):
     )
 
 
-settings = Settings()
+import os
+import logging
 
+_logger = logging.getLogger(__name__)
+
+# Railway may provide DB URL under different names - map them to DATABASE_URL
+_RAILWAY_DB_ALIASES = [
+    "DATABASE_URL",
+    "DATABASE_PRIVATE_URL",
+    "DATABASE_PUBLIC_URL",
+    "RAILWAY_DATABASE_URL",
+]
+
+if not os.environ.get("DATABASE_URL"):
+    for alias in _RAILWAY_DB_ALIASES[1:]:
+        val = os.environ.get(alias)
+        if val:
+            os.environ["DATABASE_URL"] = val
+            _logger.info(f"Mapped {alias} → DATABASE_URL")
+            break
+
+# Debug: log available env vars at startup (redacted)
+_db_url = os.environ.get("DATABASE_URL", "")
+_logger.info(f"DATABASE_URL present: {bool(_db_url)}, length: {len(_db_url)}")
+
+settings = Settings()
