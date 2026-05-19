@@ -34,6 +34,7 @@ type Invoice = {
   created_at: string
   qr_code_url?: string
   notes?: string
+  representative_name?: string
 }
 
 type Organization = {
