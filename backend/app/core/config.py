@@ -1,13 +1,10 @@
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 import secrets
 from pathlib import Path
 
-from dotenv import load_dotenv
 import os
-
-load_dotenv()
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -84,9 +81,11 @@ class Settings(BaseSettings):
     FREE_PLAN_MAX_ROOMS: int = 10
     BASIC_PLAN_MAX_ROOMS: int = 50
 
-    class Config:
-        env_file = BACKEND_DIR / ".env"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"
+)
 
 
 settings = Settings()
