@@ -327,7 +327,10 @@ export default function MeterReadingsPage() {
               ) : filteredReadings.length === 0 ? (
                 <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={6}>Không tìm thấy chỉ số phù hợp với "{globalSearchQuery}"</td></tr>
               ) : (
-                filteredReadings.map((item) => (
+                filteredReadings
+                 .filter(item => viewMode !== 'active' || (Number(item.reading_month) === currentMonth && Number(item.reading_year) === currentYear)
+  )
+                .map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50">
                     <td className="px-4 py-3 font-semibold">{roomLabel(item.room_id)}</td>
                     <td className="px-4 py-3">{getTenantName(item.room_id)}</td>
