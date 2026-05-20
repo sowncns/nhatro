@@ -26,7 +26,7 @@ async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    # 1. Verify password
+  
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
 
