@@ -326,9 +326,9 @@ async def get_usage_stats(
             "usage_percent": int((current_rooms / limits["max_rooms"]) * 100) if limits["max_rooms"] < 999999 else 0,
         },
         "users": {
-            "current": current_users + 1,  # +1 for owner
+            "current": current_users , 
             "max": limits["max_users"],
-            "usage_percent": int(((current_users + 1) / limits["max_users"]) * 100) if limits["max_users"] < 999999 else 0,
+            "usage_percent": int(((current_users) / limits["max_users"]) * 100) if limits["max_users"] < 999999 else 0,
         },
         "active_contracts": active_contracts,
         "monthly_invoices": monthly_invoices,
