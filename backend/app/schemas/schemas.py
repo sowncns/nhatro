@@ -24,9 +24,18 @@ class RegisterRequest(BaseModel):
         return v
 
 
+class LoginPolicy(str, Enum):
+    REJECT_NEW_LOGIN = "reject_new_login"
+    REVOKE_OLDEST_SESSION = "revoke_oldest_session"
+    REVOKE_ALL_OLD_SESSIONS = "revoke_all_old_sessions"
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    device_id: str
+    device_name: Optional[str] = None
+    policy: Optional[LoginPolicy] = LoginPolicy.REVOKE_OLDEST_SESSION
 
 
 class TokenResponse(BaseModel):
@@ -84,6 +93,18 @@ class UserResponse(BaseModel):
     phone: Optional[str]
     avatar_url: Optional[str]
     role: str
+    is_active: bool
+    created_at: datetime
+
+
+class UserSessionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    device_id: str
+    device_name: Optional[str]
+    user_agent: Optional[str]
+    ip_address: Optional[str]
+    last_seen: datetime
     is_active: bool
     created_at: datetime
 

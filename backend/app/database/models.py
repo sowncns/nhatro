@@ -150,6 +150,7 @@ class User(Base):
     organizations = relationship("Organization", back_populates="owner")
     org_memberships = relationship("OrganizationMember", back_populates="user")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 
 
 class Organization(Base):
@@ -205,6 +206,27 @@ class RefreshToken(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="refresh_tokens")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        Index("ix_user_sessions_user_active", "user_id", "is_active"),
+    )
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    user_id = Column(UUID(as_uuid=False), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    refresh_token_hash = Column(String(255), unique=True, nullable=False, index=True)
+    device_id = Column(String(255), nullable=False)
+    device_name = Column(String(255))
+    user_agent = Column(String(500))
+    ip_address = Column(String(45))
+    last_seen = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    is_active = Column(Boolean, default=True, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="sessions")
 
 
 # ─────────────────────────────────────────────

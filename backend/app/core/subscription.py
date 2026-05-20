@@ -13,6 +13,7 @@ class SubscriptionLimits:
         SubscriptionPlan.FREE: {
             "max_rooms": 10,
             "max_users": 1,
+            "max_devices": 1,
             "features": ["basic_invoicing", "basic_reports"],
             "can_export": False,
             "can_use_api": False,
@@ -21,6 +22,7 @@ class SubscriptionLimits:
         SubscriptionPlan.STARTER: {
             "max_rooms": 30,
             "max_users": 2,
+            "max_devices": 2,
             "features": ["basic_invoicing", "basic_reports", "email_notifications"],
             "can_export": True,
             "can_use_api": False,
@@ -29,6 +31,7 @@ class SubscriptionLimits:
         SubscriptionPlan.BASIC: {
             "max_rooms": 50,
             "max_users": 3,
+            "max_devices": 3,
             "features": ["basic_invoicing", "advanced_reports", "email_notifications", "sms_notifications"],
             "can_export": True,
             "can_use_api": False,
@@ -37,6 +40,7 @@ class SubscriptionLimits:
         SubscriptionPlan.PRO: {
             "max_rooms": 200,
             "max_users": 10,
+            "max_devices": 5,
             "features": ["basic_invoicing", "advanced_reports", "email_notifications", "sms_notifications", "auto_invoice", "payment_gateway"],
             "can_export": True,
             "can_use_api": True,
@@ -45,6 +49,7 @@ class SubscriptionLimits:
         SubscriptionPlan.SCALE: {
             "max_rooms": 999999,  # Unlimited
             "max_users": 999999,  # Unlimited
+            "max_devices": 999999,  # Unlimited
             "features": ["all"],
             "can_export": True,
             "can_use_api": True,

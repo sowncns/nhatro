@@ -1,16 +1,33 @@
-from fastapi import Depends, HTTPException, status
+from datetime import datetime, timezone
+from fastapi import Depends, HTTPException, status, BackgroundTasks, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 from app.core.security import verify_token
-from app.database.session import get_db
+from app.database.session import get_db, AsyncSessionLocal
 from app.models.models import User, Organization, OrganizationMember, UserRole
+from app.utils.redis_helper import RedisSessionHelper
 
 security = HTTPBearer()
 
 
+async def update_session_last_seen_task(session_id: str, ip_address: Optional[str]):
+    """Background task to update last_seen timestamp in the DB without blocking the request."""
+    try:
+        async with AsyncSessionLocal() as local_db:
+            from app.repositories.user_session import UserSessionRepository
+            repo = UserSessionRepository(local_db)
+            await repo.update_last_seen(session_id, ip_address)
+            await local_db.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger("app.deps").error(f"Error in background task update_session_last_seen: {e}")
+
+
 async def get_current_user(
+    request: Request,
+    background_tasks: BackgroundTasks,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
@@ -23,10 +40,63 @@ async def get_current_user(
         )
 
     user_id = payload.get("sub")
+    session_id = payload.get("sid")
+
+    # 1. Require sid (Session ID) for session limit checks
+    if not session_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Legacy token format. Please log in again.",
+        )
+
+    # 2. Check session active in Redis
+    cached = await RedisSessionHelper.get_cached_session(session_id)
+    is_active = False
+    
+    if cached:
+        is_active = cached.get("is_active", False)
+    else:
+        # Fallback to DB
+        from app.repositories.user_session import UserSessionRepository
+        repo = UserSessionRepository(db)
+        session_db = await repo.get_session(session_id)
+        
+        if (
+            session_db 
+            and session_db.is_active 
+            and session_db.expires_at.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc)
+        ):
+            is_active = True
+            # Cache back to Redis
+            ttl = int((session_db.expires_at.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)).total_seconds())
+            if ttl > 0:
+                session_data = {
+                    "id": session_db.id,
+                    "user_id": session_db.user_id,
+                    "device_id": session_db.device_id,
+                    "device_name": session_db.device_name,
+                    "is_active": True,
+                    "expires_at": session_db.expires_at.isoformat(),
+                }
+                await RedisSessionHelper.cache_session(session_id, session_data, ttl)
+                await RedisSessionHelper.add_user_session_to_list(session_db.user_id, session_id)
+
+    if not is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been revoked or expired. Please log in again.",
+        )
+
+    # 3. Fetch user
     result = await db.execute(select(User).where(User.id == user_id, User.is_active == True))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
+    # 4. Asynchronously update session's last_seen
+    client_ip = request.client.host if request.client else None
+    background_tasks.add_task(update_session_last_seen_task, session_id, client_ip)
+
     return user
 
 
