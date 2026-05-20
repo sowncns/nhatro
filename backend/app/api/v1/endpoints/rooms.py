@@ -8,6 +8,8 @@ from app.models.models import Room
 from app.schemas.schemas import RoomCreate, RoomUpdate, RoomResponse, PaginatedResponse
 from app.repositories.base import BaseRepository
 from app.services.cache_service import CacheService
+from app.services.invalidate_helper import InvalidateHelper
+from app.core.cache_constants import TTL_ROOM_LIST, TTL_ROOM_DETAIL
 
 router = APIRouter()
 
@@ -50,7 +52,7 @@ async def list_rooms(
         size=size,
         pages=(total + size - 1) // size,
     )
-    await CacheService.set(cache_key, res.model_dump(), expire=300)
+    await CacheService.set(cache_key, res.model_dump(), expire=TTL_ROOM_LIST)
     return res
 
 
@@ -78,8 +80,7 @@ async def create_room(
             room_data[key] = value
 
     room = await repo.create(room_data)
-    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
-    await CacheService.invalidate(f"dashboard:")
+    await InvalidateHelper.invalidate_room(ctx.organization_id)
     return RoomResponse.model_validate(room)
 
 
@@ -89,11 +90,19 @@ async def get_room(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"rooms:detail:{ctx.organization_id}:{room_id}"
+    cached = await CacheService.get(cache_key)
+    if cached:
+        return cached
+
     repo = BaseRepository(Room, db, ctx.organization_id)
     room = await repo.get(room_id)
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
-    return RoomResponse.model_validate(room)
+    
+    res = RoomResponse.model_validate(room)
+    await CacheService.set(cache_key, res.model_dump(), expire=TTL_ROOM_DETAIL)
+    return res
 
 
 @router.patch("/{room_id}", response_model=RoomResponse)
@@ -107,8 +116,7 @@ async def update_room(
     room = await repo.update(room_id, data.model_dump(exclude_none=True))
     if not room:
         raise HTTPException(status_code=404, detail="Room not found")
-    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
-    await CacheService.invalidate(f"dashboard:")
+    await InvalidateHelper.invalidate_room(ctx.organization_id, room_id)
     return RoomResponse.model_validate(room)
 
 
@@ -122,5 +130,4 @@ async def delete_room(
     deleted = await repo.delete(room_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Room not found")
-    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
-    await CacheService.invalidate(f"dashboard:")
+    await InvalidateHelper.invalidate_room(ctx.organization_id, room_id)

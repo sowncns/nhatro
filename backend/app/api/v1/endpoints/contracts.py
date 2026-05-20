@@ -9,6 +9,8 @@ from app.schemas.schemas import ContractCreate, ContractResponse, PaginatedRespo
 from app.repositories.base import BaseRepository
 from datetime import datetime
 from app.services.cache_service import CacheService
+from app.services.invalidate_helper import InvalidateHelper
+from app.core.cache_constants import TTL_CONTRACT_LIST, TTL_CONTRACT_DETAIL
 from app.services.contract_termination_service import ContractTerminationService
 
 router = APIRouter()
@@ -39,7 +41,7 @@ async def list_contracts(
         total=total, page=page, size=size,
         pages=(total + size - 1) // size,
     )
-    await CacheService.set(cache_key, res.model_dump(), expire=300)
+    await CacheService.set(cache_key, res.model_dump(), expire=TTL_CONTRACT_LIST)
     return res
 
 
@@ -50,7 +52,6 @@ async def create_contract(
     db: AsyncSession = Depends(get_db),
 ):
     if not data.tenant_id or data.tenant_id == "":
-        from fastapi import HTTPException
         raise HTTPException(status_code=400, detail="Vui lòng chọn khách thuê cho hợp đồng")
         
     try:
@@ -115,10 +116,8 @@ async def create_contract(
                 "is_primary": False,
                 "move_in_date": data.start_date,
             })
-
-        await CacheService.invalidate(f"contracts:list:{ctx.organization_id}")
-        await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
-        await CacheService.invalidate(f"dashboard:")
+        
+        await InvalidateHelper.invalidate_contract(ctx.organization_id)
 
         return ContractResponse.model_validate(contract)
     except Exception as e:
@@ -134,11 +133,19 @@ async def get_contract(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"contracts:detail:{ctx.organization_id}:{contract_id}"
+    cached = await CacheService.get(cache_key)
+    if cached:
+        return cached
+
     repo = BaseRepository(Contract, db, ctx.organization_id)
     contract = await repo.get(contract_id)
     if not contract:
         raise HTTPException(status_code=404, detail="Contract not found")
-    return ContractResponse.model_validate(contract)
+    
+    res = ContractResponse.model_validate(contract)
+    await CacheService.set(cache_key, res.model_dump(), expire=TTL_CONTRACT_DETAIL)
+    return res
 
 
 @router.post("/{contract_id}/terminate", response_model=ContractResponse)
@@ -151,10 +158,7 @@ async def terminate_contract(
     service = ContractTerminationService(db, ctx.organization_id, ctx.user.id)
     contract = await service.terminate_contract(contract_id, data)
     
-    await CacheService.invalidate(f"contracts:list:{ctx.organization_id}")
-    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
-    await CacheService.invalidate(f"dashboard:")
-    
+    await InvalidateHelper.invalidate_contract(ctx.organization_id, contract_id)
     return ContractResponse.model_validate(contract)
 
 
@@ -168,8 +172,5 @@ async def cancel_contract(
     service = ContractTerminationService(db, ctx.organization_id, ctx.user.id)
     contract = await service.cancel_contract(contract_id, reason)
     
-    await CacheService.invalidate(f"contracts:list:{ctx.organization_id}")
-    await CacheService.invalidate(f"rooms:list:{ctx.organization_id}")
-    await CacheService.invalidate(f"dashboard:")
-    
+    await InvalidateHelper.invalidate_contract(ctx.organization_id, contract_id)
     return ContractResponse.model_validate(contract)

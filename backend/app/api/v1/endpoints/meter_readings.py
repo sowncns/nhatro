@@ -8,6 +8,8 @@ from app.models.models import MeterReading, Contract, ContractStatus
 from app.schemas.schemas import MeterReadingCreate, MeterReadingUpdate, MeterReadingResponse, PaginatedResponse
 from app.repositories.base import BaseRepository
 from app.services.cache_service import CacheService
+from app.services.invalidate_helper import InvalidateHelper
+from app.core.cache_constants import TTL_UTILITY_LIST
 
 router = APIRouter()
 
@@ -46,7 +48,7 @@ async def list_meter_readings(
         total=total, page=page, size=size,
         pages=(total + size - 1) // size,
     )
-    await CacheService.set(cache_key, res.model_dump(), expire=300)
+    await CacheService.set(cache_key, res.model_dump(), expire=TTL_UTILITY_LIST)
     return res
 
 
@@ -115,8 +117,7 @@ async def create_meter_reading(
             await db.flush()
             await db.refresh(existing_reading)
             
-            await CacheService.invalidate(f"mr:list:{ctx.organization_id}")
-            await CacheService.invalidate(f"dashboard:")
+            await InvalidateHelper.invalidate_utility(ctx.organization_id, existing_reading.id)
             
             return MeterReadingResponse.model_validate(existing_reading)
 
@@ -134,10 +135,11 @@ async def create_meter_reading(
         
         reading = await repo.create(reading_data)
 
-        await CacheService.invalidate(f"mr:list:{ctx.organization_id}")
-        await CacheService.invalidate(f"dashboard:")
+        await InvalidateHelper.invalidate_utility(ctx.organization_id, reading.id)
 
         return MeterReadingResponse.model_validate(reading)
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         from datetime import datetime
@@ -179,10 +181,11 @@ async def update_meter_reading(
 
         updated = await repo.update(id, update_data)
 
-        await CacheService.invalidate(f"mr:list:{ctx.organization_id}")
-        await CacheService.invalidate(f"dashboard:")
+        await InvalidateHelper.invalidate_utility(ctx.organization_id, id)
 
         return MeterReadingResponse.model_validate(updated)
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         from datetime import datetime

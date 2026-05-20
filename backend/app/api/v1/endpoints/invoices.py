@@ -1,5 +1,5 @@
 """Invoices Endpoints"""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
@@ -9,6 +9,9 @@ from app.models.models import Invoice
 from app.schemas.schemas import InvoiceCreate, InvoiceResponse, PaginatedResponse
 from app.repositories.base import BaseRepository
 from app.services.invoice_service import InvoiceService
+from app.services.cache_service import CacheService
+from app.services.invalidate_helper import InvalidateHelper
+from app.core.cache_constants import TTL_INVOICE_LIST, TTL_INVOICE_DETAIL
 
 router = APIRouter()
 
@@ -25,6 +28,11 @@ async def list_invoices(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"invoices:list:{ctx.organization_id}:{page}:{size}:{status}:{month}:{year}:{room_id}:{mode}"
+    cached = await CacheService.get(cache_key)
+    if cached:
+        return cached
+
     repo = BaseRepository(Invoice, db, ctx.organization_id)
     filters = []
     if status:
@@ -69,11 +77,13 @@ async def list_invoices(
             resp.representative_name = tenant_names_map.get(inv.contract_id, "N/A")
         formatted_items.append(resp)
         
-    return PaginatedResponse(
+    res = PaginatedResponse(
         items=formatted_items,
         total=total, page=page, size=size,
         pages=(total + size - 1) // size,
     )
+    await CacheService.set(cache_key, res.model_dump(), expire=TTL_INVOICE_LIST)
+    return res
 
 
 @router.post("", response_model=InvoiceResponse, status_code=201)
@@ -82,7 +92,6 @@ async def create_invoice(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
-    from sqlalchemy import select
     from app.models.models import Contract, ContractStatus
     
     service = InvoiceService(db, ctx.organization_id)
@@ -98,7 +107,9 @@ async def create_invoice(
     contract = contract_result.scalar_one_or_none()
     contract_id = contract.id if contract else None
     
-    return await service.create_invoice(data, contract_id=contract_id)
+    inv = await service.create_invoice(data, contract_id=contract_id)
+    await InvalidateHelper.invalidate_invoice(ctx.organization_id)
+    return inv
 
 
 @router.post("/auto-generate")
@@ -109,7 +120,6 @@ async def auto_generate_invoices(
     db: AsyncSession = Depends(get_db),
 ):
     """Auto-generate invoices for all occupied rooms"""
-    from sqlalchemy import select
     from app.models.models import Room, RoomStatus
     rooms = await db.execute(
         select(Room).where(
@@ -126,6 +136,8 @@ async def auto_generate_invoices(
             generated.append(inv.invoice_number)
         except Exception as e:
             errors.append({"room": room.room_number, "error": str(e)})
+            
+    await InvalidateHelper.invalidate_invoice(ctx.organization_id)
     return {"generated": generated, "errors": errors}
 
 
@@ -135,12 +147,19 @@ async def get_invoice(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"invoices:detail:{ctx.organization_id}:{invoice_id}"
+    cached = await CacheService.get(cache_key)
+    if cached:
+        return cached
+
     repo = BaseRepository(Invoice, db, ctx.organization_id)
     invoice = await repo.get(invoice_id)
     if not invoice:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Invoice not found")
-    return InvoiceResponse.model_validate(invoice)
+        
+    res = InvoiceResponse.model_validate(invoice)
+    await CacheService.set(cache_key, res.model_dump(), expire=TTL_INVOICE_DETAIL)
+    return res
 
 
 @router.post("/{invoice_id}/pay")
@@ -153,7 +172,10 @@ async def record_payment(
     db: AsyncSession = Depends(get_db),
 ):
     service = InvoiceService(db, ctx.organization_id)
-    return await service.record_payment(invoice_id, amount, payment_method, reference_number)
+    res = await service.record_payment(invoice_id, amount, payment_method, reference_number)
+    await InvalidateHelper.invalidate_invoice(ctx.organization_id, invoice_id)
+    return res
+
 
 @router.post("/{invoice_id}/approve")
 async def approve_invoice(
@@ -161,10 +183,9 @@ async def approve_invoice(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.database.models import PaymentProof, ProofStatus, Invoice, InvoiceStatus
+    from app.database.models import PaymentProof, ProofStatus, InvoiceStatus
     import datetime
     from datetime import timezone
-    from fastapi import HTTPException
 
     # Find the invoice
     repo = BaseRepository(Invoice, db, ctx.organization_id)
@@ -197,6 +218,7 @@ async def approve_invoice(
         invoice.status = InvoiceStatus.PAID
 
     await db.commit()
+    await InvalidateHelper.invalidate_invoice(ctx.organization_id, invoice_id)
     return {"status": "success", "message": "Đã duyệt minh chứng và ghi nhận thanh toán"}
 
 
@@ -208,10 +230,10 @@ async def reject_invoice_proof(
     db: AsyncSession = Depends(get_db),
 ):
     """Reject payment proof and return invoice to active unpaid state"""
-    from app.database.models import PaymentProof, ProofStatus, Invoice, InvoiceStatus
+    from app.database.models import PaymentProof, ProofStatus, InvoiceStatus
+
     import datetime
     from datetime import timezone
-    from fastapi import HTTPException
 
     # Find the invoice
     repo = BaseRepository(Invoice, db, ctx.organization_id)
@@ -241,7 +263,9 @@ async def reject_invoice_proof(
     invoice.status = InvoiceStatus.SENT
 
     await db.commit()
+    await InvalidateHelper.invalidate_invoice(ctx.organization_id, invoice_id)
     return {"status": "success", "message": f"Đã từ chối minh chứng. Lý do: {reason}"}
+
 
 @router.put("/{invoice_id}", response_model=InvoiceResponse)
 async def update_invoice(
@@ -251,7 +275,9 @@ async def update_invoice(
     db: AsyncSession = Depends(get_db),
 ):
     service = InvoiceService(db, ctx.organization_id)
-    return await service.update_invoice(invoice_id, data)
+    res = await service.update_invoice(invoice_id, data)
+    await InvalidateHelper.invalidate_invoice(ctx.organization_id, invoice_id)
+    return res
 
 
 @router.post("/{invoice_id}/confirm", response_model=InvoiceResponse)
@@ -261,4 +287,6 @@ async def confirm_invoice(
     db: AsyncSession = Depends(get_db),
 ):
     service = InvoiceService(db, ctx.organization_id)
-    return await service.confirm_invoice(invoice_id)
+    res = await service.confirm_invoice(invoice_id)
+    await InvalidateHelper.invalidate_invoice(ctx.organization_id, invoice_id)
+    return res

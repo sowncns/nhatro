@@ -6,6 +6,7 @@ from app.database.session import get_db
 from app.core.deps import get_tenant_context, TenantContext
 from app.services.dashboard_service import DashboardService
 from app.services.cache_service import CacheService
+from app.core.cache_constants import TTL_DASHBOARD
 
 router = APIRouter()
 
@@ -22,7 +23,7 @@ async def get_stats(
 
     service = DashboardService(db, ctx.organization_id)
     result = await service.get_stats()
-    await CacheService.set(cache_key, result.model_dump(), expire=300)
+    await CacheService.set(cache_key, result.model_dump(), expire=TTL_DASHBOARD)
     return result
 
 
@@ -42,7 +43,7 @@ async def get_revenue(
 
     service = DashboardService(db, ctx.organization_id)
     result = await service.get_monthly_revenue(year)
-    await CacheService.set(cache_key, result, expire=300)
+    await CacheService.set(cache_key, result, expire=TTL_DASHBOARD)
     return result
 
 
@@ -58,8 +59,9 @@ async def get_occupancy(
 
     service = DashboardService(db, ctx.organization_id)
     result = await service.get_room_occupancy_trend()
-    await CacheService.set(cache_key, result, expire=300)
+    await CacheService.set(cache_key, result, expire=TTL_DASHBOARD)
     return result
+
 
 @router.get("/search")
 async def global_search(

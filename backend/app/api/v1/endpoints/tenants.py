@@ -8,6 +8,8 @@ from app.models.models import Tenant
 from app.schemas.schemas import TenantCreate, TenantUpdate, TenantResponse, PaginatedResponse
 from app.repositories.base import BaseRepository
 from app.services.cache_service import CacheService
+from app.services.invalidate_helper import InvalidateHelper
+from app.core.cache_constants import TTL_TENANT_LIST, TTL_TENANT_DETAIL
 
 router = APIRouter()
 
@@ -41,7 +43,7 @@ async def list_tenants(
         total=total, page=page, size=size,
         pages=(total + size - 1) // size,
     )
-    await CacheService.set(cache_key, res.model_dump(), expire=300)
+    await CacheService.set(cache_key, res.model_dump(), expire=TTL_TENANT_LIST)
     return res
 
 
@@ -58,8 +60,7 @@ async def create_tenant(
             raise HTTPException(status_code=400, detail="Khách thuê với số CCCD này đã tồn tại trong hệ thống")
             
     tenant = await repo.create(data.model_dump())
-    await CacheService.invalidate(f"tenants:list:{ctx.organization_id}")
-    await CacheService.invalidate(f"dashboard:")
+    await InvalidateHelper.invalidate_tenant(ctx.organization_id)
     return TenantResponse.model_validate(tenant)
 
 
@@ -69,11 +70,19 @@ async def get_tenant(
     ctx: TenantContext = Depends(get_tenant_context),
     db: AsyncSession = Depends(get_db),
 ):
+    cache_key = f"tenants:detail:{ctx.organization_id}:{tenant_id}"
+    cached = await CacheService.get(cache_key)
+    if cached:
+        return cached
+
     repo = BaseRepository(Tenant, db, ctx.organization_id)
     tenant = await repo.get(tenant_id)
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant not found")
-    return TenantResponse.model_validate(tenant)
+    
+    res = TenantResponse.model_validate(tenant)
+    await CacheService.set(cache_key, res.model_dump(), expire=TTL_TENANT_DETAIL)
+    return res
 
 
 @router.patch("/{tenant_id}", response_model=TenantResponse)
@@ -87,6 +96,5 @@ async def update_tenant(
     tenant = await repo.update(tenant_id, data.model_dump(exclude_none=True))
     if not tenant:
         raise HTTPException(status_code=404, detail="Not found")
-    await CacheService.invalidate(f"tenants:list:{ctx.organization_id}")
-    await CacheService.invalidate(f"dashboard:")
+    await InvalidateHelper.invalidate_tenant(ctx.organization_id, tenant_id)
     return TenantResponse.model_validate(tenant)
