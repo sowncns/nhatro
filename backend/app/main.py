@@ -28,13 +28,30 @@ async def lifespan(app: FastAPI):
     await RedisClient.check_health()
     
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        # Create enum types & add missing values in a single DO $$ block
+        # to avoid pgbouncer prepared statement cache conflicts
         if engine.dialect.name == "postgresql":
-            await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'platform_admin'"))
-            await conn.execute(text("ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'starter'"))
-            await conn.execute(text("ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'scale'"))
-            await conn.execute(text("ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'WAITING_VERIFY'"))
-            await conn.execute(text("ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'REJECTED'"))
+            await conn.execute(text("""
+                DO $$ BEGIN
+                    -- Create new enum types if not exist
+                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'proofstatus') THEN
+                        CREATE TYPE proofstatus AS ENUM ('pending', 'verified', 'rejected');
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'repairstatus') THEN
+                        CREATE TYPE repairstatus AS ENUM ('pending', 'processing', 'completed', 'rejected');
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'complaintstatus') THEN
+                        CREATE TYPE complaintstatus AS ENUM ('pending', 'processing', 'completed');
+                    END IF;
+                    -- Add missing values to existing enums
+                    BEGIN ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'platform_admin'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'starter'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'scale'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'WAITING_VERIFY'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'REJECTED'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                END $$;
+            """))
+        await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created/verified")
     yield
     
@@ -107,13 +124,54 @@ async def rate_limit_middleware(request: Request, call_next):
 
 # ─── Exception Handlers ──────────────────────────────────
 
+from fastapi.exceptions import RequestValidationError
+
+def _get_cors_headers(request: Request) -> dict:
+    origin = request.headers.get("origin")
+    if not origin:
+        return {}
+    allowed_origins = settings.cors_origins_list
+    if "*" in allowed_origins or origin in allowed_origins:
+        return {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    return {}
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    try:
+        with open("d:\\nhatro\\backend\\error_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"\n=== VALIDATION ERROR AT {request.method} {request.url.path} ===\n")
+            f.write(str(exc.errors()))
+            f.write("\n==============================================\n")
+    except Exception:
+        pass
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors()},
+        headers=_get_cors_headers(request),
+    )
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    import traceback
+    try:
+        with open("d:\\nhatro\\backend\\error_log.txt", "a", encoding="utf-8") as f:
+            f.write(f"\n=== GLOBAL EXCEPTION HANDLER AT {request.method} {request.url.path} ===\n")
+            f.write(traceback.format_exc())
+            f.write("==============================================\n")
+    except Exception as log_err:
+        logger.error(f"Failed to write to error_log.txt: {log_err}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Internal server error"},
+        content={"detail": f"Internal server error: {str(exc)}"},
+        headers=_get_cors_headers(request),
     )
+
 
 
 # ─── Routes ──────────────────────────────────────────────

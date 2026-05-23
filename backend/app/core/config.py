@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 _env_file = BACKEND_DIR / ".env"
 if _env_file.exists():
-    load_dotenv(_env_file, override=False)
+    load_dotenv(_env_file, override=True)
     logger.info(f"Loaded .env from {_env_file}")
 
 # Railway may provide DB URL under different variable names
@@ -56,8 +56,8 @@ class Settings:
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
     # CORS
-    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
-    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,https://nhatro-gray.vercel.app")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000,http://127.0.0.1:3000,https://nhatro-gray.vercel.app")
 
     @property
     def cors_origins_list(self) -> List[str]:

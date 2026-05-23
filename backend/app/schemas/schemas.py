@@ -14,7 +14,8 @@ class RegisterRequest(BaseModel):
     password: str
     full_name: str
     phone: Optional[str] = None
-    organization_name: str
+    organization_name:  Optional[str] = None
+    otp_code: str
 
     @field_validator("password")
     @classmethod
@@ -22,6 +23,17 @@ class RegisterRequest(BaseModel):
         if len(v) < 8:
             raise ValueError("Password must be at least 8 characters")
         return v
+
+    @field_validator("otp_code")
+    @classmethod
+    def validate_otp_code(cls, v):
+        if not v.isdigit() or len(v) != 6:
+            raise ValueError("OTP code must be 6 digits")
+        return v
+
+
+class RegisterOTPSendRequest(BaseModel):
+    email: EmailStr
 
 
 class LoginPolicy(str, Enum):
@@ -33,7 +45,7 @@ class LoginPolicy(str, Enum):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
-    device_id: str
+    device_id: Optional[str] = None
     device_name: Optional[str] = None
     policy: Optional[LoginPolicy] = LoginPolicy.REVOKE_OLDEST_SESSION
 
@@ -43,6 +55,7 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user: "UserResponse"
+    device_id: Optional[str] = None
 
 
 class RefreshTokenRequest(BaseModel):
@@ -404,6 +417,12 @@ class InvoiceCreate(BaseModel):
     old_debt: int = 0
     due_date: date
     notes: Optional[str] = None
+
+
+class InvoiceBulkEmailRequest(BaseModel):
+    billing_month: Optional[int] = None
+    billing_year: Optional[int] = None
+    invoice_ids: Optional[List[str]] = None
 
 
 class InvoiceResponse(BaseModel):

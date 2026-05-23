@@ -29,6 +29,7 @@ export default function BoardingHousesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState('')
 
   const loadBoardingHouses = async () => {
     setIsLoading(true)
@@ -39,6 +40,16 @@ export default function BoardingHousesPage() {
       toast.error('Không tải được danh sách khu trọ')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // Background refresh: KHÔNG hiện loading
+  const refreshBoardingHouses = async () => {
+    try {
+      const { data } = await api.getBoardingHouses({ size: 100 })
+      setBoardingHouses(data.items)
+    } catch {
+      // Silent fail
     }
   }
 
@@ -66,7 +77,7 @@ export default function BoardingHousesPage() {
       }
       setForm(emptyForm)
       setEditingId(null)
-      await loadBoardingHouses()
+      await refreshBoardingHouses()
     } catch {
       toast.error('Không lưu được khu trọ')
     } finally {
@@ -86,12 +97,15 @@ export default function BoardingHousesPage() {
 
   const deleteHouse = async (id: string) => {
     if (!confirm('Xóa khu trọ này?')) return
+    setDeletingId(id)
     try {
       await api.deleteBoardingHouse(id)
       toast.success('Đã xóa khu trọ')
-      await loadBoardingHouses()
+      await refreshBoardingHouses()
     } catch {
       toast.error('Không xóa được khu trọ')
+    } finally {
+      setDeletingId('')
     }
   }
 
@@ -154,8 +168,8 @@ export default function BoardingHousesPage() {
                   <button onClick={() => startEdit(house)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800">
                     <Pencil className="h-4 w-4" />
                   </button>
-                  <button onClick={() => deleteHouse(house.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800">
-                    <Trash2 className="h-4 w-4 text-red-500" />
+                  <button disabled={deletingId === house.id} onClick={() => deleteHouse(house.id)} className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800 disabled:opacity-60">
+                    {deletingId === house.id ? <Loader2 className="h-4 w-4 animate-spin text-red-500" /> : <Trash2 className="h-4 w-4 text-red-500" />}
                   </button>
                 </div>
               </div>

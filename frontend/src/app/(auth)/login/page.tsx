@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { FormEvent, useState } from 'react'
 import { Building2, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react'
 import { toast } from 'sonner'
-
 import api from '@/services/api'
 import { useAuthStore } from '@/store/auth'
 
@@ -25,12 +24,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
+  
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setIsSubmitting(true)
 
     try {
+ 
       const { data } = await api.login({ email, password })
       setAuth(data.user, data.access_token, data.refresh_token)
       toast.success('Đăng nhập thành công')

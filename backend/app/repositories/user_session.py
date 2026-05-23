@@ -59,6 +59,7 @@ class UserSessionRepository:
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None,
         expires_at: Optional[datetime] = None,
+        session_id: Optional[str] = None,
     ) -> UserSession:
         """Create a new user session in the database."""
         if not expires_at:
@@ -68,6 +69,7 @@ class UserSessionRepository:
             expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
         session = UserSession(
+            id=session_id,
             user_id=user_id,
             refresh_token_hash=refresh_token_hash,
             device_id=device_id,

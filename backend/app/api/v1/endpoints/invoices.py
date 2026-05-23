@@ -1,4 +1,8 @@
 """Invoices Endpoints"""
+import asyncio
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -6,14 +10,70 @@ from typing import Optional
 from app.database.session import get_db
 from app.core.deps import get_tenant_context, TenantContext
 from app.models.models import Invoice
-from app.schemas.schemas import InvoiceCreate, InvoiceResponse, PaginatedResponse
+from app.schemas.schemas import InvoiceCreate, InvoiceResponse, PaginatedResponse, InvoiceBulkEmailRequest
 from app.repositories.base import BaseRepository
 from app.services.invoice_service import InvoiceService
 from app.services.cache_service import CacheService
 from app.services.invalidate_helper import InvalidateHelper
 from app.core.cache_constants import TTL_INVOICE_LIST, TTL_INVOICE_DETAIL
+from app.core.config import settings
 
 router = APIRouter()
+
+
+def _format_vnd(amount: int) -> str:
+    return f"{amount:,.0f}".replace(",", ".") + " đ"
+
+
+async def _send_invoice_email(email: str, subject: str, html: str):
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        raise ValueError("SMTP_USER and SMTP_PASSWORD are required to send invoice email")
+
+    sender = settings.EMAIL_FROM or settings.SMTP_USER
+    message = MIMEMultipart("alternative")
+    message["Subject"] = subject
+    message["From"] = sender
+    message["To"] = email
+    message.attach(MIMEText(html, "html", "utf-8"))
+
+    def send_mail():
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_USER, [email], message.as_string())
+
+    await asyncio.to_thread(send_mail)
+
+
+def _invoice_email_html(invoice, tenant, room, organization) -> str:
+    remaining = (invoice.total_amount or 0) - (invoice.paid_amount or 0)
+    qr_html = ""
+    if invoice.qr_code_url:
+        qr_html = f"""
+        <p style="margin: 16px 0 8px; font-weight: 600;">Quét mã để thanh toán</p>
+        <img src="{invoice.qr_code_url}" alt="QR thanh toán" style="width: 180px; height: 180px; border: 1px solid #e2e8f0; border-radius: 12px;" />
+        """
+
+    return f"""
+    <div style="font-family: Arial, sans-serif; color: #0f172a; line-height: 1.55; max-width: 640px;">
+      <h2 style="margin: 0 0 8px;">Hóa đơn {invoice.invoice_number}</h2>
+      <p style="margin: 0 0 16px;">Xin chào {tenant.full_name},</p>
+      <p>{organization.name} gửi hóa đơn phòng <strong>{room.room_number}</strong> kỳ <strong>{invoice.billing_month}/{invoice.billing_year}</strong>.</p>
+      <table style="border-collapse: collapse; width: 100%; margin: 16px 0;">
+        <tr><td style="padding: 8px; border: 1px solid #e2e8f0;">Tiền phòng</td><td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right;">{_format_vnd(invoice.rent_amount or 0)}</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #e2e8f0;">Điện</td><td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right;">{_format_vnd(invoice.electricity_amount or 0)}</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #e2e8f0;">Nước</td><td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right;">{_format_vnd(invoice.water_amount or 0)}</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #e2e8f0;">Internet</td><td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right;">{_format_vnd(invoice.internet_amount or 0)}</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #e2e8f0;">Gửi xe</td><td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right;">{_format_vnd(invoice.parking_amount or 0)}</td></tr>
+        <tr><td style="padding: 8px; border: 1px solid #e2e8f0;">Nợ cũ</td><td style="padding: 8px; border: 1px solid #e2e8f0; text-align: right;">{_format_vnd(invoice.old_debt or 0)}</td></tr>
+        <tr><td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: 700;">Cần thanh toán</td><td style="padding: 10px; border: 1px solid #e2e8f0; text-align: right; color: #dc2626; font-weight: 700;">{_format_vnd(remaining)}</td></tr>
+      </table>
+      <p> <strong>VUI LÒNG GIỮ LẠI HÓA ĐƠN THANH TOÁN ĐỂ GỬI MINH CHỨNG CHO CHỦ TRỌ TRÊN TRONG DÀNH CHO NGƯỜI THUÊ TRỌ</strong></p>
+      <p>Hạn thanh toán: <strong>{invoice.due_date.strftime("%d/%m/%Y")}</strong></p>
+      {qr_html}
+      <p style="margin-top: 18px; color: #64748b; font-size: 13px;">Nếu đã thanh toán, vui lòng bỏ qua email này hoặc gửi minh chứng trong cổng khách thuê.</p>
+    </div>
+    """
 
 
 @router.get("", response_model=PaginatedResponse)
@@ -139,6 +199,92 @@ async def auto_generate_invoices(
             
     await InvalidateHelper.invalidate_invoice(ctx.organization_id)
     return {"generated": generated, "errors": errors}
+
+
+@router.post("/send-bulk-email")
+async def send_bulk_invoice_email(
+    data: InvoiceBulkEmailRequest,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.database.models import Contract, Tenant, Room, Organization, InvoiceStatus
+
+    query = (
+        select(Invoice, Contract, Tenant, Room, Organization)
+        .join(Contract, Invoice.contract_id == Contract.id)
+        .join(Tenant, Contract.tenant_id == Tenant.id)
+        .join(Room, Invoice.room_id == Room.id)
+        .join(Organization, Invoice.organization_id == Organization.id)
+        .where(Invoice.organization_id == ctx.organization_id)
+        .where(Invoice.status.notin_(
+            [InvoiceStatus.DRAFT, 
+            InvoiceStatus.CANCELLED,
+            InvoiceStatus.PAID,
+            InvoiceStatus.PENDING_CONFIRMATION,
+            InvoiceStatus.REJECTED,
+            ]))
+    )
+
+    if data.invoice_ids:
+        query = query.where(Invoice.id.in_(data.invoice_ids))
+    else:
+        if not data.billing_month or not data.billing_year:
+            raise HTTPException(status_code=400, detail="Vui lòng chọn tháng/năm hoặc danh sách hóa đơn")
+        query = query.where(
+            Invoice.billing_month == data.billing_month,
+            Invoice.billing_year == data.billing_year,
+        )
+
+    result = await db.execute(query)
+    rows = result.all()
+    if not rows:
+        return {
+            "sent": 0,
+            "skipped": 0,
+            "failed": 0,
+            "details": [],
+            "message": "Không có hóa đơn đã chốt phù hợp để gửi",
+        }
+
+    details = []
+    for invoice, contract, tenant, room, organization in rows:
+        if not tenant.email:
+            details.append({
+                "invoice_number": invoice.invoice_number,
+                "room_number": room.room_number,
+                "tenant_name": tenant.full_name,
+                "status": "skipped",
+                "reason": "Người đại diện chưa có email",
+            })
+            continue
+
+        try:
+            await _send_invoice_email(
+                tenant.email,
+                f"Hóa đơn {invoice.invoice_number} - Phòng {room.room_number}",
+                _invoice_email_html(invoice, tenant, room, organization),
+            )
+            details.append({
+                "invoice_number": invoice.invoice_number,
+                "room_number": room.room_number,
+                "tenant_name": tenant.full_name,
+                "email": tenant.email,
+                "status": "sent",
+            })
+        except Exception as exc:
+            details.append({
+                "invoice_number": invoice.invoice_number,
+                "room_number": room.room_number,
+                "tenant_name": tenant.full_name,
+                "email": tenant.email,
+                "status": "failed",
+                "reason": str(exc),
+            })
+
+    sent = sum(1 for item in details if item["status"] == "sent")
+    skipped = sum(1 for item in details if item["status"] == "skipped")
+    failed = sum(1 for item in details if item["status"] == "failed")
+    return {"sent": sent, "skipped": skipped, "failed": failed, "details": details}
 
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)

@@ -43,6 +43,7 @@ export default function RoomsPage() {
   const [form, setForm] = useState(emptyForm)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState('')
   const { globalSearchQuery } = useSearchStore()
 
   const houseName = (id: string) => boardingHouses.find((house) => house.id === id)?.name || '-'
@@ -72,6 +73,16 @@ export default function RoomsPage() {
     }
   }
 
+  // Background refresh: chỉ fetch lại rooms, KHÔNG hiện loading
+  const refreshRooms = async () => {
+    try {
+      const { data } = await api.getRooms({ size: 100 })
+      setRooms(data.items)
+    } catch {
+      // Silent fail – data cũ vẫn hiển thị
+    }
+  }
+
   useEffect(() => {
     loadData()
   }, [])
@@ -89,7 +100,7 @@ export default function RoomsPage() {
       })
       toast.success('Đã thêm phòng')
       setForm({ ...emptyForm, boarding_house_id: form.boarding_house_id })
-      await loadData()
+      await refreshRooms()
     } catch {
       toast.error('Không thêm được phòng')
     } finally {
@@ -99,12 +110,15 @@ export default function RoomsPage() {
 
   const deleteRoom = async (id: string) => {
     if (!confirm('Xóa phòng này?')) return
+    setDeletingId(id)
     try {
       await api.deleteRoom(id)
       toast.success('Đã xóa phòng')
-      await loadData()
+      await refreshRooms()
     } catch {
       toast.error('Không xóa được phòng')
+    } finally {
+      setDeletingId('')
     }
   }
 
@@ -178,7 +192,9 @@ export default function RoomsPage() {
                   <td className="px-4 py-4"><StatusBadge status={roomStatusLabel(room.status)} /></td>
                   <td className="px-4 py-4">{room.max_occupants}</td>
                   <td className="px-4 py-4 text-right">
-                    <button onClick={() => deleteRoom(room.id)} className="font-semibold text-red-600 hover:text-red-700"><Trash2 className="inline h-4 w-4" /></button>
+                    <button disabled={deletingId === room.id} onClick={() => deleteRoom(room.id)} className="inline-flex items-center gap-1 font-semibold text-red-600 hover:text-red-700 disabled:opacity-60">
+                      {deletingId === room.id ? <Loader2 className="inline h-4 w-4 animate-spin" /> : <Trash2 className="inline h-4 w-4" />}
+                    </button>
                   </td>
                 </tr>
               ))}

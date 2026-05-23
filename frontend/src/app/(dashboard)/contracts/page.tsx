@@ -154,6 +154,20 @@ export default function ContractsPage() {
     }
   }
 
+  // Background refresh: chỉ fetch lại contracts + rooms (trạng thái phòng thay đổi), KHÔNG hiện loading
+  const refreshAfterMutation = async () => {
+    try {
+      const [contractsRes, roomsRes] = await Promise.all([
+        api.getContracts({ size: 100, mode: viewMode }),
+        api.getRooms({ size: 100 }),
+      ])
+      setContracts(contractsRes.data.items)
+      setAllRooms(roomsRes.data.items)
+    } catch {
+      // Silent fail – data cũ vẫn hiển thị
+    }
+  }
+
   useEffect(() => {
     loadData()
   }, [viewMode])
@@ -186,7 +200,7 @@ export default function ContractsPage() {
       toast.success('Đã tạo hợp đồng thành công')
       setForm(emptyForm)
       setShowForm(false)
-      await loadData()
+      await refreshAfterMutation()
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Không tạo được hợp đồng. Kiểm tra lại thông tin.'
       toast.error(msg)
@@ -223,7 +237,7 @@ export default function ContractsPage() {
       })
       toast.success('Đã thanh lý hợp đồng thành công')
       setShowTerminateModal(false)
-      await loadData()
+      await refreshAfterMutation()
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Không thể thanh lý hợp đồng')
     } finally {

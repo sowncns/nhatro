@@ -5,11 +5,12 @@ from sqlalchemy import select
 
 from app.database.session import get_db
 from app.services.auth_service import AuthService
+from app.services.otp_service import OTPService
 from app.services.session_service import SessionService
 from app.schemas.schemas import (
     RegisterRequest, LoginRequest, TokenResponse,
     RefreshTokenRequest, ForgotPasswordRequest, ResetPasswordRequest,
-    ChangePasswordRequest, UserSessionResponse,
+    ChangePasswordRequest, UserSessionResponse, RegisterOTPSendRequest,
 )
 from app.core.deps import get_current_user
 from app.models.models import User
@@ -18,10 +19,37 @@ from app.core.security import verify_password
 router = APIRouter()
 
 
+@router.post("/register/send-otp")
+async def send_register_otp(data: RegisterOTPSendRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.email == data.email))
+    if result.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    otp_service = OTPService(db)
+    otp_code = await otp_service.create_otp(email=data.email)
+    try:
+        await otp_service.send_email_otp(data.email, otp_code)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Không gửi được mã OTP: {str(exc)}") from exc
+
+    return {"message": "OTP sent successfully"}
+
+
 @router.post("/register", response_model=TokenResponse)
-async def register(data: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    data: RegisterRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
     service = AuthService(db)
-    return await service.register(data)
+    user_agent = request.headers.get("user-agent")
+    ip_address = request.client.host if request.client else None
+
+    return await service.register(
+        data,
+        user_agent=user_agent,
+        ip_address=ip_address,
+    )
 
 
 @router.post("/login", response_model=TokenResponse)

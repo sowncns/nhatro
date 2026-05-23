@@ -107,6 +107,16 @@ export default function MeterReadingsPage() {
     }
   }
 
+  // Background refresh: chỉ fetch lại readings, KHÔNG hiện loading
+  const refreshReadings = async () => {
+    try {
+      const { data } = await api.getMeterReadings({ size: 100, mode: viewMode })
+      setReadings(data.items)
+    } catch {
+      // Silent fail
+    }
+  }
+
   useEffect(() => {
     loadData()
   }, [viewMode])
@@ -133,7 +143,7 @@ export default function MeterReadingsPage() {
       }
       setForm(emptyForm)
       setEditingId(null)
-      await loadData()
+      await refreshReadings()
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Không lưu được chỉ số'
       toast.error(msg)

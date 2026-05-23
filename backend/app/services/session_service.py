@@ -41,7 +41,7 @@ class SessionService:
         )
         org = result.scalar_one_or_none()
         if not org:
-            # If user is not an owner (e.g. manager, staff, tenant), fallback to FREE limit
+           
             return SubscriptionLimits.get_limits(SubscriptionPlan.FREE)["max_devices"]
 
         limits = SubscriptionLimits.get_limits(org.subscription_plan)
@@ -50,13 +50,20 @@ class SessionService:
     async def create_session(
         self,
         user_id: str,
-        device_id: str,
+        device_id: Optional[str] = None,
         device_name: Optional[str] = None,
         user_agent: Optional[str] = None,
         ip_address: Optional[str] = None,
         policy: str = "revoke_oldest_session",
     ) -> TokenResponse:
         """Create a new session for a user, enforcing subscription limits with lock protection."""
+        if not device_id:
+            # Generate a reliable device fingerprint from user_agent and ip_address
+            fingerprint = f"{user_agent or ''}_{ip_address or ''}"
+            device_id = f"gen_{hashlib.md5(fingerprint.encode()).hexdigest()}"
+            if not device_name:
+                device_name = "Unknown Web Device"
+
         lock_key = f"lock:user:{user_id}"
 
         # 1. Acquire Distributed Lock to prevent race conditions
@@ -110,6 +117,7 @@ class SessionService:
                 user_agent=user_agent,
                 ip_address=ip_address,
                 expires_at=expires_at,
+                session_id=session_id,
             )
 
             # 7. Cache in Redis
@@ -129,6 +137,7 @@ class SessionService:
                 access_token=access_token,
                 refresh_token=refresh_token,
                 user=UserResponse.model_validate(user),
+                device_id=device_id,
             )
 
     async def refresh_session(self, refresh_token: str) -> TokenResponse:
@@ -202,6 +211,7 @@ class SessionService:
             access_token=new_access_token,
             refresh_token=new_refresh_token,
             user=UserResponse.model_validate(user),
+            device_id=session.device_id,
         )
 
     async def revoke_session(self, session_id: str, user_id: str) -> bool:

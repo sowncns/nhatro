@@ -1,7 +1,6 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000'
 class ApiClient {
   private client: AxiosInstance
 
@@ -25,19 +24,34 @@ class ApiClient {
       (response) => response,
       async (error) => {
         const originalRequest = error.config
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true
-          try {
-            const refreshToken = this.getRefreshToken()
-            if (!refreshToken) throw new Error('No refresh token')
-            const res = await this.client.post('/auth/refresh', { refresh_token: refreshToken })
-            const { access_token, refresh_token } = res.data
-            this.setTokens(access_token, refresh_token)
-            originalRequest.headers.Authorization = `Bearer ${access_token}`
-            return this.client(originalRequest)
-          } catch {
-            this.clearTokens()
-            window.location.href = '/login'
+
+        if (error.response?.status === 401) {
+          // If refresh token or login endpoint itself fails with 401, session is completely dead
+          if (
+            originalRequest.url?.includes('/auth/refresh')
+          ) {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('session-expired'))
+            }
+            return Promise.reject(error)
+          }
+
+          if (!originalRequest._retry) {
+            originalRequest._retry = true
+            try {
+              const refreshToken = this.getRefreshToken()
+              if (!refreshToken) throw new Error('No refresh token')
+              const res = await this.client.post('/auth/refresh', { refresh_token: refreshToken })
+              const { access_token, refresh_token } = res.data
+              this.setTokens(access_token, refresh_token)
+              originalRequest.headers.Authorization = `Bearer ${access_token}`
+              return this.client(originalRequest)
+            } catch {
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('session-expired'))
+              }
+              return Promise.reject(error)
+            }
           }
         }
         return Promise.reject(error)
@@ -68,6 +82,7 @@ class ApiClient {
 
   // Auth
   register = (data: any) => this.client.post('/auth/register', data)
+  sendRegisterOtp = (data: { email: string }) => this.client.post('/auth/register/send-otp', data)
   login = (data: any) => this.client.post('/auth/login', data)
   me = () => this.client.get('/auth/me')
   logout = () => { this.clearTokens(); window.location.href = '/login' }
@@ -125,6 +140,7 @@ class ApiClient {
   getInvoice = (id: string) => this.client.get(`/invoices/${id}`)
   createInvoice = (data: any) => this.client.post('/invoices', data)
   autoGenerateInvoices = (month: number, year: number) => this.client.post('/invoices/auto-generate', null, { params: { billing_month: month, billing_year: year } })
+  sendBulkInvoiceEmail = (data: { billing_month?: number; billing_year?: number; invoice_ids?: string[] }) => this.client.post('/invoices/send-bulk-email', data)
   payInvoice = (id: string, amount: number, method: string) => this.client.post(`/invoices/${id}/pay`, null, { params: { amount, payment_method: method } })
   updateInvoice = (id: string, data: any) => this.client.put(`/invoices/${id}`, data)
   confirmInvoice = (id: string) => this.client.post(`/invoices/${id}/confirm`)

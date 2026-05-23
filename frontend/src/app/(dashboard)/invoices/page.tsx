@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Download, Loader2, Plus, QrCode, X, FileText, Calendar } from 'lucide-react'
+import { Download, Loader2, Plus, QrCode, X, FileText, Calendar, Mail } from 'lucide-react'
 import { toast } from 'sonner'
 
 import api from '@/services/api'
@@ -96,12 +96,14 @@ export default function InvoicesPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSavingManual, setIsSavingManual] = useState(false)
   const [isGeneratingAuto, setIsGeneratingAuto] = useState(false)
+  const [isSendingBulkEmail, setIsSendingBulkEmail] = useState(false)
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([])
   const [previewProof, setPreviewProof] = useState<string>('')
   const [rejectPaymentId, setRejectPaymentId] = useState<string>('')
   const [rejectReason, setRejectReason] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [viewMode, setViewMode] = useState<'active' | 'history' | 'archived'>('active')
+  const [actionLoadingId, setActionLoadingId] = useState<string>('')
   const { globalSearchQuery } = useSearchStore()
 
   const [showForm, setShowForm] = useState(false)
@@ -174,19 +176,56 @@ export default function InvoicesPage() {
         setPendingPayments([])
       }
 
-      if (
-        housesRes.status === 'rejected' ||
-        roomsRes.status === 'rejected' ||
-        invoicesRes.status === 'rejected' ||
-        orgRes.status === 'rejected' ||
-        tenantsRes.status === 'rejected'
-      ) {
-        toast.error('Một phần dữ liệu hóa đơn tải thất bại')
+      const failures: string[] = []
+      const logDetails: any = {}
+
+      if (housesRes.status === 'rejected') {
+        failures.push('Khu trọ')
+        logDetails.houses = housesRes.reason
+      }
+      if (roomsRes.status === 'rejected') {
+        failures.push('Phòng')
+        logDetails.rooms = roomsRes.reason
+      }
+      if (invoicesRes.status === 'rejected') {
+        failures.push('Hóa đơn')
+        logDetails.invoices = invoicesRes.reason
+      }
+      if (orgRes.status === 'rejected') {
+        failures.push('Thông tin tổ chức')
+        logDetails.org = orgRes.reason
+      }
+      if (tenantsRes.status === 'rejected') {
+        failures.push('Khách thuê')
+        logDetails.tenants = tenantsRes.reason
+      }
+
+      if (failures.length > 0) {
+        console.error('Invoice page loading errors:', logDetails)
+        const details = Object.values(logDetails)
+          .map((err: any) => err.response?.data?.detail || err.message)
+          .filter(Boolean)
+          .join('; ')
+        toast.error(`Tải dữ liệu thất bại (${failures.join(', ')}). Chi tiết: ${details || 'Lỗi kết nối'}`)
       }
     } catch {
       toast.error('Không tải được hóa đơn')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // Background refresh: chỉ fetch lại invoices + pending payments, KHÔNG hiện loading
+  const refreshAfterMutation = async () => {
+    try {
+      const [invoicesRes, pendingRes] = await Promise.allSettled([
+        api.getInvoices({ size: 100, mode: viewMode }),
+        api.getPendingPayments()
+      ])
+      if (invoicesRes.status === 'fulfilled') setInvoices(invoicesRes.value.data.items)
+      if (pendingRes.status === 'fulfilled') setPendingPayments(pendingRes.value.data || [])
+    } catch {
+      // Silent fail – data cũ vẫn hiển thị
     }
   }
 
@@ -212,22 +251,72 @@ export default function InvoicesPage() {
     try {
       const { data } = await api.autoGenerateInvoices(Number(month), Number(year))
       toast.success(`Đã tạo ${data.generated?.length || 0} hóa đơn`)
-      if (data.errors?.length) {
+
+      const activeErrors = (data.errors || []).filter((err: any) => {
+        const errMsg = err.error?.toLowerCase() || '';
+        return !errMsg.includes('tồn tại') && !errMsg.includes('already exists');
+      });
+
+      if (activeErrors.length) {
         toast.warning(
           <div className="flex flex-col gap-1">
-            <span className="font-semibold">{data.errors.length} phòng lỗi:</span>
-            {data.errors.map((err: any, i: number) => (
-              <span key={i} className="text-xs text-slate-500">Phòng {err.room}: {err.error === 'Invoice already exists for this period' ? 'Đã có hóa đơn tháng này' : err.error}</span>
+            <span className="font-semibold">{activeErrors.length} phòng lỗi:</span>
+            {activeErrors.map((err: any, i: number) => (
+              <span key={i} className="text-xs text-slate-500">Phòng {err.room}: {err.error}</span>
             ))}
           </div>,
           { duration: 5000 }
         )
       }
-      await loadData()
+      await refreshAfterMutation()
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Không tạo được hóa đơn')
     } finally {
       setIsGeneratingAuto(false)
+    }
+  }
+
+  const sendBulkInvoiceEmails = async () => {
+    const billingMonth = Number(month)
+    const billingYear = Number(year)
+    if (!billingMonth || !billingYear) {
+      toast.error('Vui lòng chọn tháng/năm cần gửi')
+      return
+    }
+
+    const invoicesInPeriod = invoices.filter(
+      (invoice) =>
+        invoice.billing_month === billingMonth &&
+        invoice.billing_year === billingYear &&
+        invoice.status !== 'DRAFT' &&
+        invoice.status !== 'CANCELLED'
+    )
+
+    if (!invoicesInPeriod.length) {
+      toast.error('Không có hóa đơn đã chốt trong kỳ này để gửi')
+      return
+    }
+
+    setIsSendingBulkEmail(true)
+    try {
+      const { data } = await api.sendBulkInvoiceEmail({
+        billing_month: billingMonth,
+        billing_year: billingYear,
+      })
+
+      if (data.sent > 0) {
+        toast.success(`Đã gửi ${data.sent} email hóa đơn`)
+      } else {
+        toast.warning(data.message || 'Chưa gửi được email nào')
+      }
+
+      if (data.skipped || data.failed) {
+        toast.warning(`Bỏ qua ${data.skipped || 0}, lỗi ${data.failed || 0}`)
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Không gửi được mail hóa đơn')
+    } finally {
+      setIsSendingBulkEmail(false)
     }
   }
 
@@ -260,7 +349,7 @@ export default function InvoicesPage() {
       
       setShowForm(false)
       setEditingId(null)
-      loadData()
+      refreshAfterMutation()
     } catch (err: any) {
       let msg = 'Lỗi khi lưu hóa đơn'
       if (err.response?.data?.detail) {
@@ -295,17 +384,21 @@ export default function InvoicesPage() {
   }
 
   const handleConfirm = async (id: string) => {
+    setActionLoadingId(`confirm-${id}`)
     try {
       await api.confirmInvoice(id)
       toast.success('Đã chốt hóa đơn chính thức')
-      loadData()
+      refreshAfterMutation()
     } catch {
       toast.error('Lỗi khi chốt hóa đơn')
+    } finally {
+      setActionLoadingId('')
     }
   }
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault()
+    setActionLoadingId(`pay-${payId}`)
     try {
       const invoice = invoices.find(i => i.id === payId)
       if (!invoice) return
@@ -321,30 +414,38 @@ export default function InvoicesPage() {
       await api.payInvoice(payId, amountNum, payMethod)
       toast.success('Đã ghi nhận thanh toán')
       setPayId('')
-      loadData()
+      refreshAfterMutation()
     } catch {
       toast.error('Lỗi khi ghi nhận thanh toán')
+    } finally {
+      setActionLoadingId('')
     }
   }
 
   const handleApprove = async (id: string) => {
+    setActionLoadingId(`approve-${id}`)
     try {
       await api.approveInvoice(id)
       toast.success('Đã duyệt hóa đơn')
-      loadData()
+      refreshAfterMutation()
     } catch {
       toast.error('Lỗi khi duyệt hóa đơn')
+    } finally {
+      setActionLoadingId('')
     }
   }
 
   const handleConfirmPendingPayment = async (invoiceId: string) => {
+    setActionLoadingId(`pending-confirm-${invoiceId}`)
     try {
       await api.approveInvoice(invoiceId)
       toast.success('Đã xác nhận thanh toán thành công')
       setPreviewProof('')
-      await loadData()
+      await refreshAfterMutation()
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Lỗi khi xác nhận thanh toán')
+    } finally {
+      setActionLoadingId('')
     }
   }
 
@@ -354,15 +455,18 @@ export default function InvoicesPage() {
       return
     }
 
+    setActionLoadingId(`pending-reject-${rejectPaymentId}`)
     try {
       await api.rejectInvoiceProof(rejectPaymentId, rejectReason)
       toast.success('Đã từ chối minh chứng thanh toán')
       setRejectPaymentId('')
       setRejectReason('')
       setPreviewProof('')
-      await loadData()
+      await refreshAfterMutation()
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Lỗi khi từ chối thanh toán')
+    } finally {
+      setActionLoadingId('')
     }
   }
 
@@ -626,18 +730,21 @@ export default function InvoicesPage() {
                   <div className="mt-4 flex gap-2">
                     <button
                       type="button"
+                      disabled={actionLoadingId === `pending-confirm-${payment.invoice_id}`}
                       onClick={() => handleConfirmPendingPayment(payment.invoice_id)}
-                      className="flex-1 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                      className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
                     >
+                      {actionLoadingId === `pending-confirm-${payment.invoice_id}` && <Loader2 className="h-4 w-4 animate-spin" />}
                       Xác nhận
                     </button>
                     <button
                       type="button"
+                      disabled={!!actionLoadingId}
                       onClick={() => {
                         setRejectPaymentId(payment.invoice_id)
                         setRejectReason('')
                       }}
-                      className="flex-1 rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950/30"
+                      className="flex-1 rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950/30 disabled:opacity-60"
                     >
                       Từ chối
                     </button>
@@ -800,7 +907,7 @@ export default function InvoicesPage() {
       </div>
 
       <Card className="p-5">
-        <div className="grid gap-4 sm:grid-cols-[0.5fr_0.6fr_auto] sm:items-end">
+        <div className="grid gap-4 lg:grid-cols-[0.5fr_0.6fr_auto_auto] lg:items-end">
           <label className="text-sm font-medium">
             Tháng
             <input type="number" min="1" max="12" value={month} onChange={(e) => setMonth(e.target.value)} className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 dark:border-slate-800 dark:bg-slate-950" />
@@ -812,6 +919,10 @@ export default function InvoicesPage() {
           <button onClick={generateInvoices} disabled={isGeneratingAuto} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white disabled:bg-slate-500 dark:bg-white dark:text-slate-950">
             {isGeneratingAuto && <Loader2 className="h-4 w-4 animate-spin" />}
             Tạo hóa đơn từ chỉ số
+          </button>
+          <button onClick={sendBulkInvoiceEmails} disabled={isSendingBulkEmail} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-200">
+            {isSendingBulkEmail ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+            Gửi mail hàng loạt
           </button>
         </div>
       </Card>
@@ -855,9 +966,11 @@ export default function InvoicesPage() {
                       {invoice.status === 'DRAFT' && (
                           <div className="flex gap-4">
                             <button
+                              disabled={actionLoadingId === `confirm-${invoice.id}`}
                               onClick={() => handleConfirm(invoice.id)}
-                              className="font-semibold text-emerald-600 hover:text-emerald-700"
+                              className="inline-flex items-center gap-1.5 font-semibold text-emerald-600 hover:text-emerald-700 disabled:opacity-60"
                             >
+                              {actionLoadingId === `confirm-${invoice.id}` && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                               Chốt
                             </button>
                             <button
@@ -870,9 +983,11 @@ export default function InvoicesPage() {
                       )}
                       {invoice.status === 'WAITING_VERIFY' && (
                         <button
+                          disabled={actionLoadingId === `approve-${invoice.id}`}
                           onClick={() => handleApprove(invoice.id)}
-                          className="font-semibold text-emerald-600 hover:text-emerald-700"
+                          className="inline-flex items-center gap-1.5 font-semibold text-emerald-600 hover:text-emerald-700 disabled:opacity-60"
                         >
+                          {actionLoadingId === `approve-${invoice.id}` && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                           Duyệt
                         </button>
                       )}
@@ -935,9 +1050,11 @@ export default function InvoicesPage() {
               </button>
               <button
                 type="button"
+                disabled={!!actionLoadingId}
                 onClick={handleRejectPendingPayment}
-                className="h-10 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white hover:bg-rose-700"
+                className="h-10 inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
               >
+                {actionLoadingId.startsWith('pending-reject') && <Loader2 className="h-4 w-4 animate-spin" />}
                 Xác nhận từ chối
               </button>
             </div>
@@ -975,8 +1092,8 @@ export default function InvoicesPage() {
                 </label>
               </div> */}
               <div className="mt-6 flex gap-2 justify-end">
-                <button type="button" onClick={() => setPayId('')} className="h-10 rounded-xl px-4 text-sm font-semibold border border-slate-200 dark:border-slate-800">Hủy</button>
-                <button type="submit" className="h-10 rounded-xl px-5 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700">Xác nhận đã thu</button>
+                <button type="button" disabled={!!actionLoadingId} onClick={() => setPayId('')} className="h-10 rounded-xl px-4 text-sm font-semibold border border-slate-200 dark:border-slate-800 disabled:opacity-60">Hủy</button>
+                <button type="submit" disabled={!!actionLoadingId} className="h-10 inline-flex items-center gap-2 rounded-xl px-5 text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60">{actionLoadingId.startsWith('pay-') && <Loader2 className="h-4 w-4 animate-spin" />}Xác nhận đã thu</button>
               </div>
             </form>
           </div>

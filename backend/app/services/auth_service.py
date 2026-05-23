@@ -14,17 +14,28 @@ from app.core.security import (
 )
 from app.core.config import settings
 from app.schemas.schemas import RegisterRequest, LoginRequest, TokenResponse
+from app.services.otp_service import OTPService
 
 
 class AuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def register(self, data: RegisterRequest) -> TokenResponse:
+    async def register(
+        self,
+        data: RegisterRequest,
+        user_agent: Optional[str] = None,
+        ip_address: Optional[str] = None,
+    ) -> TokenResponse:
         # Check email exists
         existing = await self.db.execute(select(User).where(User.email == data.email))
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Email already registered")
+
+        otp_service = OTPService(self.db)
+        is_valid_otp = await otp_service.verify_otp(email=data.email, otp_code=data.otp_code)
+        if not is_valid_otp:
+            raise HTTPException(status_code=400, detail="Invalid or expired OTP code")
 
         # Create user
         user = User(
@@ -39,7 +50,11 @@ class AuthService:
         await self.db.flush()
 
         # Create organization
-        slug = slugify(data.organization_name)
+        org_name = data.organization_name
+        if not org_name or not org_name.strip():
+            org_name = f"Nhà trọ {data.full_name}"
+
+        slug = slugify(org_name)
         # Ensure unique slug
         slug_count = await self.db.execute(
             select(Organization).where(Organization.slug.like(f"{slug}%"))
@@ -49,7 +64,7 @@ class AuthService:
             slug = f"{slug}-{count}"
 
         org = Organization(
-            name=data.organization_name,
+            name=org_name,
             slug=slug,
             owner_id=user.id,
             subscription_plan="free",
@@ -66,7 +81,15 @@ class AuthService:
         self.db.add(member)
         await self.db.flush()
 
-        return await self._create_tokens(user)
+        from app.services.session_service import SessionService
+        session_service = SessionService(self.db)
+        return await session_service.create_session(
+            user_id=user.id,
+            device_id=None,
+            device_name="Thiết bị đăng ký mới",
+            user_agent=user_agent,
+            ip_address=ip_address,
+        )
 
     async def login(self, data: LoginRequest) -> TokenResponse:
         result = await self.db.execute(select(User).where(User.email == data.email))

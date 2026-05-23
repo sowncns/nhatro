@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Toaster } from 'sonner'
+import CountdownLogout from '@/components/CountdownLogout'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ export default function RootLayout({
     <html lang="vi" className="dark" suppressHydrationWarning>
       <body>
         {children}
+        <CountdownLogout />
         <Toaster position="top-right" richColors />
       </body>
     </html>

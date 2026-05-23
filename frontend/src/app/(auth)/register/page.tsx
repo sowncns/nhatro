@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { FormEvent, useState } from 'react'
-import { Building2, Eye, EyeOff, Loader2, Lock, Mail, Phone, User } from 'lucide-react'
+import { Building2, Eye, EyeOff, KeyRound, Loader2, Lock, Mail, Phone, User } from 'lucide-react'
 import { toast } from 'sonner'
 
 import api from '@/services/api'
@@ -27,8 +27,30 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [otpCode, setOtpCode] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSendingOtp, setIsSendingOtp] = useState(false)
+
+  const handleSendOtp = async () => {
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail) {
+      toast.error('Vui lòng nhập email trước khi gửi mã OTP')
+      return
+    }
+
+    setIsSendingOtp(true)
+    try {
+      await api.sendRegisterOtp({ email: normalizedEmail })
+      setOtpSent(true)
+      toast.success('Đã gửi mã OTP đến email của bạn')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setIsSendingOtp(false)
+    }
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -43,15 +65,21 @@ export default function RegisterPage() {
       return
     }
 
+    if (!/^\d{6}$/.test(otpCode)) {
+      toast.error('Mã OTP phải gồm 6 chữ số')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
       const { data } = await api.register({
-        email,
+        email: email.trim(),
         password,
         full_name: fullName,
         phone: phone || undefined,
         organization_name: organizationName,
+        otp_code: otpCode,
       })
       setAuth(data.user, data.access_token, data.refresh_token)
       toast.success('Tạo tài khoản thành công')
@@ -114,7 +142,6 @@ export default function RegisterPage() {
                     id="organizationName"
                     name="organizationName"
                     type="text"
-                    required
                     value={organizationName}
                     onChange={(event) => setOrganizationName(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
@@ -137,7 +164,10 @@ export default function RegisterPage() {
                     autoComplete="email"
                     required
                     value={email}
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+                      setEmail(event.target.value)
+                      setOtpSent(false)
+                    }}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="you@example.com"
                     tabIndex={3}
@@ -165,6 +195,41 @@ export default function RegisterPage() {
                 </div>
               </div>
 
+              <div className="sm:col-span-2">
+                <label htmlFor="otpCode" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
+                  Mã OTP
+                </label>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <div className="relative min-w-0 flex-1">
+                    <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                    <input
+                      id="otpCode"
+                      name="otpCode"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      required
+                      maxLength={6}
+                      value={otpCode}
+                      onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      placeholder="Nhập 6 chữ số"
+                      tabIndex={5}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={isSendingOtp || !email.trim()}
+                    className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950"
+                    tabIndex={6}
+                  >
+                    {isSendingOtp && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                    {otpSent ? 'Gửi lại mã' : 'Gửi mã'}
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-slate-800 dark:text-slate-200">
                   Mật khẩu
@@ -181,7 +246,7 @@ export default function RegisterPage() {
                     onChange={(event) => setPassword(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-11 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="Tối thiểu 8 ký tự"
-                    tabIndex={5}
+                    tabIndex={7}
                   />
                   <button
                     type="button"
@@ -210,7 +275,7 @@ export default function RegisterPage() {
                     onChange={(event) => setConfirmPassword(event.target.value)}
                     className="block h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-600/15 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     placeholder="Nhập lại mật khẩu"
-                    tabIndex={6}
+                    tabIndex={8}
                   />
                 </div>
               </div>
@@ -219,7 +284,7 @@ export default function RegisterPage() {
                 type="submit"
                 disabled={isSubmitting}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-emerald-400 sm:col-span-2"
-                tabIndex={7}
+                tabIndex={9}
               >
                 {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
                 Tạo tài khoản

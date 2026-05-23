@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react'
-import { formatDate, parseDateToISO } from '@/utils/utils'
+import React from 'react'
 
 type DateInputProps = {
   value?: string | null
@@ -10,43 +9,27 @@ type DateInputProps = {
   required?: boolean
 }
 
-export default function DateInput({ value, onChange, className = '', placeholder = '', id, required }: DateInputProps) {
-  const [display, setDisplay] = useState<string>(formatDate(value))
-
-  useEffect(() => {
-    setDisplay(formatDate(value))
-  }, [value])
-
-  const mask = (v: string) => {
-    const numbers = v.replace(/\D/g, '').slice(0, 8)
-    if (numbers.length <= 2) return numbers
-    if (numbers.length <= 4) return `${numbers.slice(0, 2)}/${numbers.slice(2)}`
-    return `${numbers.slice(0, 2)}/${numbers.slice(2, 4)}/${numbers.slice(4, 8)}`
-  }
+/**
+ * DateInput sử dụng native <input type="date">
+ * - value: ISO format yyyy-MM-dd (ví dụ "2026-05-23")
+ * - onChange: trả về ISO format yyyy-MM-dd
+ * - Trình duyệt tự hiển thị theo locale của user (VN = dd/MM/yyyy) + date picker
+ */
+export default function DateInput({ value, onChange, className = '', id, required }: DateInputProps) {
+  // Ensure value is valid ISO date or empty
+  const safeValue = value && /^\d{4}-\d{2}-\d{2}/.test(value)
+    ? value.substring(0, 10)
+    : ''
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const next = mask(e.target.value)
-    setDisplay(next)
-
-    if (next === '') {
-      onChange('')
-      return
-    }
-
-    if (/^\d{2}\/\d{2}\/\d{4}$/.test(next)) {
-      const iso = parseDateToISO(next)
-      onChange(iso || '')
-    }
+    onChange(e.target.value) // native date input always returns yyyy-MM-dd
   }
 
   return (
     <input
       id={id}
-      type="text"
-      inputMode="numeric"
-      pattern="\d{2}/\d{2}/\d{4}"
-      placeholder={placeholder || 'dd/MM/yyyy'}
-      value={display}
+      type="date"
+      value={safeValue}
       onChange={handleChange}
       className={className}
       required={required}

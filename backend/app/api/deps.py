@@ -71,15 +71,15 @@ async def get_current_user(
             ttl = int((session_db.expires_at.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)).total_seconds())
             if ttl > 0:
                 session_data = {
-                    "id": session_db.id,
-                    "user_id": session_db.user_id,
+                    "id": str(session_db.id),
+                    "user_id": str(session_db.user_id),
                     "device_id": session_db.device_id,
                     "device_name": session_db.device_name,
                     "is_active": True,
                     "expires_at": session_db.expires_at.isoformat(),
                 }
                 await RedisSessionHelper.cache_session(session_id, session_data, ttl)
-                await RedisSessionHelper.add_user_session_to_list(session_db.user_id, session_id)
+                await RedisSessionHelper.add_user_session_to_list(str(session_db.user_id), session_id)
 
     if not is_active:
         raise HTTPException(

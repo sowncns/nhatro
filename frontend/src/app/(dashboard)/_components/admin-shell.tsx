@@ -49,7 +49,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isDark, setIsDark] = useState(false)
   const { globalSearchQuery, setGlobalSearchQuery } = useSearchStore()
-
+  const fullName = useAuthStore((state) => state.user?.full_name)
   // Reset search when changing route
   useEffect(() => {
     setGlobalSearchQuery('')
@@ -84,7 +84,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
         </div>
         <div>
           <div className="text-sm font-bold tracking-normal">NhaTro</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">SaaS cho chủ trọ</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{fullName}</div>
         </div>
       </div>
 
@@ -112,14 +112,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
         })}
       </nav>
 
-      <div className="m-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
+      {/* <div className="m-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900">
         <div className="text-xs font-semibold text-slate-500 dark:text-slate-400">Tháng này</div>
         <div className="mt-2 text-xl font-bold">128.4tr</div>
         <div className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">+12% so với tháng trước</div>
         <div className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
           Gói Pro đang hoạt động
         </div>
-      </div>
+      </div> */}
     </div>
   )
 

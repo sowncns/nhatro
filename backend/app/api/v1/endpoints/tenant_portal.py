@@ -28,10 +28,18 @@ async def get_tenant_invoices(
     ctx: PortalTenantContext = Depends(get_portal_tenant_context),
     db: AsyncSession = Depends(get_db)
 ):
-    # Get invoices for the tenant's active contracts
+    # Get invoices for the tenant's active contracts OR any unpaid invoices of their other contracts
     from sqlalchemy.orm import joinedload
-    query = select(Invoice).options(joinedload(Invoice.contract)).where(
-        Invoice.contract_id.in_(ctx.contract_ids)
+    from sqlalchemy import or_
+    
+    query = select(Invoice).join(Contract, Invoice.contract_id == Contract.id).options(
+        joinedload(Invoice.contract)
+    ).where(
+        Contract.tenant_id == ctx.tenant_id,
+        or_(
+            Contract.status == "ACTIVE",
+            Invoice.status.notin_([InvoiceStatus.PAID, InvoiceStatus.CANCELLED, InvoiceStatus.DRAFT, "PAID", "CANCELLED", "DRAFT"])
+        )
     )
     result = await db.execute(query)
     invoices = result.scalars().all()
@@ -73,12 +81,17 @@ async def get_tenant_invoice(
 ):
     """Get invoice detail with VietQR payment code"""
     from sqlalchemy.orm import joinedload
+    from sqlalchemy import or_
 
-    query = select(Invoice).options(
+    query = select(Invoice).join(Contract, Invoice.contract_id == Contract.id).options(
         joinedload(Invoice.contract)
     ).where(
         Invoice.id == invoice_id,
-        Invoice.contract_id.in_(ctx.contract_ids)
+        Contract.tenant_id == ctx.tenant_id,
+        or_(
+            Contract.status == "ACTIVE",
+            Invoice.status.notin_([InvoiceStatus.PAID, InvoiceStatus.CANCELLED, InvoiceStatus.DRAFT, "PAID", "CANCELLED", "DRAFT"])
+        )
     )
     result = await db.execute(query)
     invoice = result.scalar_one_or_none()
@@ -146,13 +159,18 @@ async def upload_payment_proof_v2(
 ):
     """Upload payment proof image using PaymentProof as single source of truth."""
     from sqlalchemy.orm import joinedload
+    from sqlalchemy import or_
     from app.database.models import PaymentProof, ProofStatus, InvoiceStatus
 
-    query = select(Invoice).options(
+    query = select(Invoice).join(Contract, Invoice.contract_id == Contract.id).options(
         joinedload(Invoice.contract)
     ).where(
         Invoice.id == invoice_id,
-        Invoice.contract_id.in_(ctx.contract_ids)
+        Contract.tenant_id == ctx.tenant_id,
+        or_(
+            Contract.status == "ACTIVE",
+            Invoice.status.notin_([InvoiceStatus.PAID, InvoiceStatus.CANCELLED, InvoiceStatus.DRAFT, "PAID", "CANCELLED", "DRAFT"])
+        )
     )
     result = await db.execute(query)
     invoice = result.scalar_one_or_none()
