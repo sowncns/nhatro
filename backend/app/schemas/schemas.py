@@ -4,7 +4,6 @@ from typing import Optional, List, Any, Dict
 from datetime import date, datetime
 from enum import Enum
 
-
 # ─────────────────────────────────────────────
 # AUTH SCHEMAS
 # ─────────────────────────────────────────────
@@ -330,6 +329,84 @@ class ContractTerminateRequest(BaseModel):
     move_out_reason: Optional[str] = None
 
 
+# ─────────────────────────────────────────────
+# TERMINATION V2 (Workflow-based)
+# ─────────────────────────────────────────────
+
+class TerminationExecuteRequest(BaseModel):
+    termination_type: str
+    reason: str
+    note: Optional[str] = None
+    actual_end_date: date
+
+    # Optional meter readings (needed for normal checkout cases)
+    final_electricity: Optional[float] = None
+    final_water: Optional[float] = None
+
+    # Optional fees
+    penalty_fee: int = 0
+    damage_fee: int = 0
+    cleaning_fee: int = 0
+    other_fee: int = 0
+    refund_unused_rent: int = 0
+    compensation_fee: int = 0
+
+    # Force for ABANDONED_ROOM
+    force: bool = False
+
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class TerminationExecuteResponse(BaseModel):
+    contractId: str
+    contractStatus: str
+    terminationType: str
+    terminationReason: str
+    invoiceId: Optional[str] = None
+    invoiceStatus: Optional[str] = None
+    usedMoney: int
+    utilityFee: int
+    penaltyFee: int
+    damageFee: int
+    depositUsed: int
+    refundAmount: int
+    remainingDebt: int
+    needManualReview: bool
+    terminatedAt: str
+    terminatedBy: str
+    message: str
+
+
+class TerminationHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    contract_id: str
+    termination_type: str
+    reason: Optional[str] = None
+    note: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime
+    final_invoice_id: Optional[str] = None
+    deposit_used: int = 0
+    refund_amount: int = 0
+    remaining_debt: int = 0
+    contract_snapshot: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = Field(default=None, alias="metadata_")
+
+
+class DebtRecordResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    id: str
+    contract_id: str
+    tenant_id: str
+    invoice_id: Optional[str] = None
+    amount: int
+    status: str
+    risk_flag: bool = False
+    note: Optional[str] = None
+    created_at: datetime
+
+
 class DepositTransactionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: str
@@ -353,26 +430,34 @@ class ContractLogResponse(BaseModel):
 # ─────────────────────────────────────────────
 
 class MeterReadingCreate(BaseModel):
-    room_id: str
-    contract_id: Optional[str] = None
-    reading_type: str = "MONTHLY"
+    room_id: str = Field(..., min_length=1, max_length=100)
+    contract_id: Optional[str] = Field(None, max_length=100)
+
+    reading_type: str = Field("MONTHLY", max_length=50)
+
     period_start: Optional[date] = None
     period_end: Optional[date] = None
-    reading_month: int
-    reading_year: int
-    electricity_previous: Optional[float] = None
-    electricity_current: float
-    water_previous: Optional[float] = None
-    water_current: float
-    notes: Optional[str] = None
+
+    reading_month: int = Field(..., ge=1, le=12)
+    reading_year: int = Field(..., ge=2000, le=2100)
+
+    electricity_previous: Optional[float] = Field(None, ge=0)
+    electricity_current: float = Field(..., ge=0)
+
+    water_previous: Optional[float] = Field(None, ge=0)
+    water_current: float = Field(..., ge=0)
+
+    notes: Optional[str] = Field(None, max_length=500)
 
 
 class MeterReadingUpdate(BaseModel):
-    electricity_previous: Optional[float] = None
-    electricity_current: Optional[float] = None
-    water_previous: Optional[float] = None
-    water_current: Optional[float] = None
-    notes: Optional[str] = None
+    electricity_previous: Optional[float] = Field(None, ge=0)
+    electricity_current: Optional[float] = Field(None, ge=0)
+
+    water_previous: Optional[float] = Field(None, ge=0)
+    water_current: Optional[float] = Field(None, ge=0)
+
+    notes: Optional[str] = Field(None, max_length=500)
 
 
 class MeterReadingResponse(BaseModel):

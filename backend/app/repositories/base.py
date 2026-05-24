@@ -54,7 +54,16 @@ class BaseRepository(Generic[ModelType]):
             if model_name == "Contract":
                 query = query.where(Contract.status.in_([ContractStatus.ENDED, ContractStatus.CANCELLED, ContractStatus.EXPIRED, ContractStatus.TERMINATED]))
             elif model_name == "Invoice":
-                query = query.where(Invoice.status.in_([InvoiceStatus.PAID, InvoiceStatus.CANCELLED]))
+                from sqlalchemy import or_, and_
+                query = query.where(
+                    or_(
+                        Invoice.status.in_([InvoiceStatus.PAID, InvoiceStatus.CANCELLED]),
+                        and_(
+                            Invoice.archived_at != None,
+                            Invoice.status.in_([InvoiceStatus.UNPAID, InvoiceStatus.PARTIAL, InvoiceStatus.OVERDUE]),
+                        )
+                    )
+                )
             elif model_name == "MaintenanceRequest":
                 query = query.where(MaintenanceRequest.status.in_([MaintenanceStatus.RESOLVED, MaintenanceStatus.CANCELLED]))
             elif model_name == "Tenant":

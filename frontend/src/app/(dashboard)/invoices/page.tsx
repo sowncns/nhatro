@@ -406,8 +406,8 @@ export default function InvoicesPage() {
       const remaining = invoice.total_amount - invoice.paid_amount
       const amountNum = Number(payAmount)
       
-      if (payMethod === 'qr' && amountNum < remaining) {
-        toast.error('Thanh toán qua QR phải trả đủ 100%')
+      if (amountNum !== remaining) {
+        toast.error(`Vui lòng thu đủ số tiền còn lại: ${formatCurrency(remaining)}`)
         return
       }
 
@@ -415,8 +415,8 @@ export default function InvoicesPage() {
       toast.success('Đã ghi nhận thanh toán')
       setPayId('')
       refreshAfterMutation()
-    } catch {
-      toast.error('Lỗi khi ghi nhận thanh toán')
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Lỗi khi ghi nhận thanh toán')
     } finally {
       setActionLoadingId('')
     }

@@ -85,10 +85,13 @@ class RoomStatus(str, enum.Enum):
 class ContractStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     ACTIVE = "ACTIVE"
+    PAYMENT_OVERDUE = "PAYMENT_OVERDUE"
+    NO_RESPONSE = "NO_RESPONSE"
     ENDED = "ENDED"
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
     TERMINATED = "TERMINATED"
+    ABANDONED_ROOM = "ABANDONED_ROOM"
 
 class DepositAction(str, enum.Enum):
     REFUND = "REFUND"
@@ -98,11 +101,26 @@ class DepositAction(str, enum.Enum):
 class InvoiceStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     SENT = "SENT"
+    UNPAID = "UNPAID"
+    PARTIAL = "PARTIAL"
     PAID = "PAID"
     OVERDUE = "OVERDUE"
     CANCELLED = "CANCELLED"
     WAITING_VERIFY = "WAITING_VERIFY"
     REJECTED = "REJECTED"
+
+class TerminationType(str, enum.Enum):
+    TENANT_EARLY_TERMINATION = "TENANT_EARLY_TERMINATION"
+    ABANDONED_ROOM = "ABANDONED_ROOM"
+    CONTRACT_EXPIRED = "CONTRACT_EXPIRED"
+    LANDLORD_TERMINATION = "LANDLORD_TERMINATION"
+    FORCE_MAJEURE = "FORCE_MAJEURE"
+    DEPOSIT_FORFEITURE = "DEPOSIT_FORFEITURE"
+
+class DebtStatus(str, enum.Enum):
+    OPEN = "OPEN"
+    SETTLED = "SETTLED"
+    WRITTEN_OFF = "WRITTEN_OFF"
 
 class PaymentMethod(str, enum.Enum):
     CASH = "CASH"

@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database.session import get_db
 from app.api.deps import require_owner, TenantContext
-from app.database.models import Payment, Invoice
+from app.database.models import Payment, Invoice, InvoiceStatus
 from datetime import datetime
 
 router = APIRouter()
@@ -73,7 +73,17 @@ async def confirm_payment(
         invoice = invoice_result.scalar_one_or_none()
 
         if invoice:
-            invoice.status = "paid"
+            remaining = (invoice.total_amount or 0) - (invoice.paid_amount or 0)
+            if remaining <= 0:
+                raise HTTPException(status_code=400, detail="Hóa đơn đã được thanh toán đủ")
+            if payment.amount != remaining:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Vui lòng xác nhận thanh toán đủ số tiền còn lại: {remaining}",
+                )
+
+            invoice.paid_amount = (invoice.paid_amount or 0) + payment.amount
+            invoice.status = InvoiceStatus.PAID
             invoice.paid_at = datetime.now()
 
     await db.commit()
@@ -118,7 +128,7 @@ async def reject_payment(
         invoice = invoice_result.scalar_one_or_none()
 
         if invoice:
-            invoice.status = "unpaid"
+            invoice.status = InvoiceStatus.SENT
 
     await db.commit()
 

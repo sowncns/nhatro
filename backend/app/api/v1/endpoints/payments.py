@@ -60,9 +60,7 @@ async def create_payment_link(
 
     # PayOS requires amount to be at least 2000 VND
     if amount_to_pay < 2000:
-         amount_to_pay = 2000 # Fallback or error? Let's use fallback for testing or raise error.
-         # Actually, better to raise error if amount is too small for PayOS.
-         # raise HTTPException(status_code=400, detail="Amount must be at least 2000 VND")
+        raise HTTPException(status_code=400, detail="Số tiền còn lại phải từ 2.000đ để thanh toán qua PayOS")
     
     payment_data = CreatePaymentLinkRequest(
         order_code=order_code,
@@ -196,6 +194,16 @@ async def confirm_payment(
         invoice = invoice_result.scalar_one_or_none()
 
         if invoice:
+            remaining = (invoice.total_amount or 0) - (invoice.paid_amount or 0)
+            if remaining <= 0:
+                raise HTTPException(status_code=400, detail="Hóa đơn đã được thanh toán đủ")
+            if payment.amount != remaining:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Vui lòng xác nhận thanh toán đủ số tiền còn lại: {remaining}",
+                )
+
+            invoice.paid_amount = (invoice.paid_amount or 0) + payment.amount
             invoice.status = InvoiceStatus.PAID
             invoice.paid_at = datetime.now()
 
@@ -241,7 +249,7 @@ async def reject_payment(
         invoice = invoice_result.scalar_one_or_none()
 
         if invoice:
-            invoice.status = InvoiceStatus.UNPAID
+            invoice.status = InvoiceStatus.SENT
 
     await db.commit()
 

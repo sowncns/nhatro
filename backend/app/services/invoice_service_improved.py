@@ -356,10 +356,13 @@ class ImprovedInvoiceService:
 
             # Validate payment amount
             remaining = invoice.total_amount - (invoice.paid_amount or 0)
-            if amount > remaining:
+            if remaining <= 0:
+                raise HTTPException(status_code=400, detail="Hóa đơn đã được thanh toán đủ")
+
+            if amount != remaining:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Payment amount ({amount}) exceeds remaining balance ({remaining})",
+                    detail=f"Vui lòng thanh toán đủ số tiền còn lại: {remaining}",
                 )
 
             # Create payment record
@@ -375,12 +378,8 @@ class ImprovedInvoiceService:
 
             # Update invoice
             invoice.paid_amount = (invoice.paid_amount or 0) + amount
-
-            if invoice.paid_amount >= invoice.total_amount:
-                invoice.status = InvoiceStatus.PAID
-                invoice.paid_at = datetime.now(timezone.utc)
-            elif invoice.paid_amount > 0:
-                invoice.status = InvoiceStatus.SENT  # partial payment
+            invoice.status = InvoiceStatus.PAID
+            invoice.paid_at = datetime.now(timezone.utc)
 
             await self.db.flush()
             await self.db.refresh(invoice)

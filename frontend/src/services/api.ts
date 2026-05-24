@@ -122,7 +122,9 @@ class ApiClient {
   getContract = (id: string) => this.client.get(`/contracts/${id}`)
   createContract = (data: any) => this.client.post('/contracts', data)
   terminateContract = (id: string, data: any) => this.client.post(`/contracts/${id}/terminate`, data)
+  terminateContractV2 = (id: string, data: any) => this.client.post(`/contracts/${id}/terminate-v2`, data)
   cancelContract = (id: string, reason: string) => this.client.post(`/contracts/${id}/cancel`, null, { params: { reason } })
+  getTerminationHistory = (id: string, params?: any) => this.client.get(`/contracts/${id}/termination-history`, { params })
 
   // Meter Readings
   getMeterReadings = (params?: any) => this.client.get('/meter-readings', { params })

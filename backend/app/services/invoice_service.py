@@ -92,9 +92,11 @@ class InvoiceService:
         electricity_amount = 0
         water_amount = 0
 
-        if meter:
-            electricity_amount = int((meter.electricity_usage or 0) * (room.electricity_price or 0))
-            water_amount = int((meter.water_usage or 0) * (room.water_price or 0))
+        if not meter:
+            raise ValueError(f"Chưa chốt điện nước tháng {billing_month}/{billing_year}")
+
+        electricity_amount = int((meter.electricity_usage or 0) * (room.electricity_price or 0))
+        water_amount = int((meter.water_usage or 0) * (room.water_price or 0))
 
         # Get org defaults for parking fee
         org_result = await self.db.execute(
@@ -254,6 +256,16 @@ class InvoiceService:
             if not invoice:
                 raise HTTPException(status_code=404, detail="Invoice not found")
 
+            remaining = (invoice.total_amount or 0) - (invoice.paid_amount or 0)
+            if remaining <= 0:
+                raise HTTPException(status_code=400, detail="Hóa đơn đã được thanh toán đủ")
+
+            if amount != remaining:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Vui lòng thanh toán đủ số tiền còn lại: {remaining}",
+                )
+
             payment = Payment(
                 organization_id=self.organization_id,
                 invoice_id=invoice_id,
@@ -265,15 +277,14 @@ class InvoiceService:
             self.db.add(payment)
 
             invoice.paid_amount = (invoice.paid_amount or 0) + amount
-            if invoice.paid_amount >= invoice.total_amount:
-                invoice.status = InvoiceStatus.PAID
-                invoice.paid_at = datetime.now(timezone.utc)
-            elif invoice.paid_amount > 0:
-                invoice.status = InvoiceStatus.SENT  # partial payment
+            invoice.status = InvoiceStatus.PAID
+            invoice.paid_at = datetime.now(timezone.utc)
 
             await self.db.flush()
             await self.db.refresh(invoice)
             return InvoiceResponse.model_validate(invoice)
+        except HTTPException:
+            raise
         except Exception as e:
             import traceback
             with open("contracts_error.log", "a", encoding="utf-8") as f:

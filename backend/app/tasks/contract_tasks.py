@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.database.models import (
     Organization, Contract, ContractStatus, Notification, NotificationType, User
 )
+from app.database.models import Invoice, InvoiceStatus
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +170,110 @@ async def _auto_expire_contracts_async():
 
     logger.info(f"✅ Auto-expired {expired_count} contracts")
     return {"expired_count": expired_count}
+
+
+@celery_app.task(name="app.tasks.contract_tasks.advance_abandoned_contracts")
+def advance_abandoned_contracts():
+    """
+    Advance contracts through abandoned pipeline:
+    ACTIVE -> PAYMENT_OVERDUE -> NO_RESPONSE -> ABANDONED_ROOM
+    Runs daily.
+    """
+    import asyncio
+    return asyncio.run(_advance_abandoned_contracts_async())
+
+
+async def _advance_abandoned_contracts_async():
+    logger.info("🔍 Advancing abandoned contract pipeline...")
+
+    today = date.today()
+    moved = {"PAYMENT_OVERDUE": 0, "NO_RESPONSE": 0, "ABANDONED_ROOM": 0}
+
+    async with async_session_maker() as db:
+        # 1) ACTIVE -> PAYMENT_OVERDUE: has any unpaid/overdue invoice past due_date
+        active_res = await db.execute(
+            select(Contract).where(
+                and_(
+                    Contract.status == ContractStatus.ACTIVE,
+                    Contract.is_archived == False,
+                )
+            )
+        )
+        active_contracts = active_res.scalars().all()
+        for c in active_contracts:
+            inv_res = await db.execute(
+                select(Invoice).where(
+                    and_(
+                        Invoice.contract_id == c.id,
+                        Invoice.organization_id == c.organization_id,
+                        Invoice.status.in_([InvoiceStatus.SENT, InvoiceStatus.UNPAID, InvoiceStatus.OVERDUE, InvoiceStatus.PARTIAL, "SENT", "UNPAID", "OVERDUE", "PARTIAL"]),
+                        Invoice.due_date < today,
+                        Invoice.is_archived == False,
+                    )
+                ).order_by(Invoice.due_date.asc()).limit(1)
+            )
+            if inv_res.scalar_one_or_none():
+                c.status = ContractStatus.PAYMENT_OVERDUE
+                moved["PAYMENT_OVERDUE"] += 1
+
+        # 2) PAYMENT_OVERDUE -> NO_RESPONSE after 7 days from first overdue invoice
+        overdue_res = await db.execute(
+            select(Contract).where(
+                and_(
+                    Contract.status == ContractStatus.PAYMENT_OVERDUE,
+                    Contract.is_archived == False,
+                )
+            )
+        )
+        overdue_contracts = overdue_res.scalars().all()
+        for c in overdue_contracts:
+            inv_res = await db.execute(
+                select(Invoice).where(
+                    and_(
+                        Invoice.contract_id == c.id,
+                        Invoice.organization_id == c.organization_id,
+                        Invoice.status.in_([InvoiceStatus.SENT, InvoiceStatus.UNPAID, InvoiceStatus.OVERDUE, InvoiceStatus.PARTIAL, "SENT", "UNPAID", "OVERDUE", "PARTIAL"]),
+                        Invoice.due_date < today,
+                        Invoice.is_archived == False,
+                    )
+                ).order_by(Invoice.due_date.asc()).limit(1)
+            )
+            inv = inv_res.scalar_one_or_none()
+            if inv and (today - inv.due_date).days >= 7:
+                c.status = ContractStatus.NO_RESPONSE
+                moved["NO_RESPONSE"] += 1
+
+        # 3) NO_RESPONSE -> ABANDONED_ROOM after 14 days from first overdue invoice
+        nr_res = await db.execute(
+            select(Contract).where(
+                and_(
+                    Contract.status == ContractStatus.NO_RESPONSE,
+                    Contract.is_archived == False,
+                )
+            )
+        )
+        nr_contracts = nr_res.scalars().all()
+        for c in nr_contracts:
+            inv_res = await db.execute(
+                select(Invoice).where(
+                    and_(
+                        Invoice.contract_id == c.id,
+                        Invoice.organization_id == c.organization_id,
+                        Invoice.status.in_([InvoiceStatus.SENT, InvoiceStatus.UNPAID, InvoiceStatus.OVERDUE, InvoiceStatus.PARTIAL, "SENT", "UNPAID", "OVERDUE", "PARTIAL"]),
+                        Invoice.due_date < today,
+                        Invoice.is_archived == False,
+                    )
+                ).order_by(Invoice.due_date.asc()).limit(1)
+            )
+            inv = inv_res.scalar_one_or_none()
+            if inv and (today - inv.due_date).days >= 14:
+                c.status = ContractStatus.ABANDONED_ROOM
+                moved["ABANDONED_ROOM"] += 1
+
+        await db.commit()
+
+    logger.info(f"✅ Abandoned pipeline advanced: {moved}")
+    return moved
 
 
 @celery_app.task(name="app.tasks.contract_tasks.check_deposit_returns")

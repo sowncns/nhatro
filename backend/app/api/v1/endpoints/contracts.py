@@ -5,13 +5,23 @@ from sqlalchemy import select
 from app.database.session import get_db
 from app.core.deps import get_tenant_context, TenantContext
 from app.models.models import Contract, MeterReading, ReadingType, Room, RoomStatus, RoomTenant
-from app.schemas.schemas import ContractCreate, ContractResponse, PaginatedResponse, ContractTerminateRequest
+from app.schemas.schemas import (
+    ContractCreate,
+    ContractResponse,
+    PaginatedResponse,
+    ContractTerminateRequest,
+    TerminationExecuteRequest,
+    TerminationExecuteResponse,
+    TerminationHistoryResponse,
+)
 from app.repositories.base import BaseRepository
 from datetime import datetime
 from app.services.cache_service import CacheService
 from app.services.invalidate_helper import InvalidateHelper
 from app.core.cache_constants import TTL_CONTRACT_LIST, TTL_CONTRACT_DETAIL
 from app.services.contract_termination_service import ContractTerminationService
+from app.services.termination_service import TerminationService
+from app.services.termination_query_service import TerminationQueryService
 
 router = APIRouter()
 
@@ -174,3 +184,71 @@ async def cancel_contract(
     
     await InvalidateHelper.invalidate_contract(ctx.organization_id, contract_id)
     return ContractResponse.model_validate(contract)
+
+
+@router.post("/{contract_id}/terminate-v2", response_model=TerminationExecuteResponse)
+async def terminate_contract_v2(
+    contract_id: str,
+    data: TerminationExecuteRequest,
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.database.models import TerminationType
+
+    try:
+        ttype = TerminationType[data.termination_type]
+    except Exception:
+        raise HTTPException(status_code=400, detail="termination_type không hợp lệ")
+
+    service = TerminationService(db, ctx.organization_id, ctx.user.id)
+    res = await service.execute(
+        contract_id=contract_id,
+        termination_type=ttype,
+        reason=data.reason,
+        note=data.note,
+        actual_end_date=data.actual_end_date,
+        final_electricity=data.final_electricity,
+        final_water=data.final_water,
+        penalty_fee=data.penalty_fee,
+        damage_fee=data.damage_fee,
+        cleaning_fee=data.cleaning_fee,
+        other_fee=data.other_fee,
+        refund_unused_rent=data.refund_unused_rent,
+        compensation_fee=data.compensation_fee,
+        force=data.force,
+        metadata=data.metadata,
+    )
+
+    await InvalidateHelper.invalidate_contract(ctx.organization_id, contract_id)
+    await InvalidateHelper.invalidate_invoice(ctx.organization_id)
+    return TerminationExecuteResponse(
+        contractId=res.contract_id,
+        contractStatus=res.contract_status,
+        terminationType=res.termination_type,
+        terminationReason=res.termination_reason,
+        invoiceId=res.invoice_id,
+        invoiceStatus=res.invoice_status,
+        usedMoney=res.used_money,
+        utilityFee=res.utility_fee,
+        penaltyFee=res.penalty_fee,
+        damageFee=res.damage_fee,
+        depositUsed=res.deposit_used,
+        refundAmount=res.refund_amount,
+        remainingDebt=res.remaining_debt,
+        needManualReview=res.need_manual_review,
+        terminatedAt=res.terminated_at,
+        terminatedBy=res.terminated_by,
+        message=res.message,
+    )
+
+
+@router.get("/{contract_id}/termination-history", response_model=list[TerminationHistoryResponse])
+async def list_termination_history(
+    contract_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    ctx: TenantContext = Depends(get_tenant_context),
+    db: AsyncSession = Depends(get_db),
+):
+    service = TerminationQueryService(db, ctx.organization_id)
+    items = await service.list_for_contract(contract_id, limit=limit)
+    return [TerminationHistoryResponse.model_validate(x) for x in items]

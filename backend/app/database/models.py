@@ -11,6 +11,10 @@ from sqlalchemy import (
     ForeignKey, Text, Enum, JSON, Date, BigInteger, Index
 )
 from sqlalchemy.dialects.postgresql import UUID
+try:
+    from sqlalchemy.dialects.postgresql import JSONB
+except Exception:  # pragma: no cover
+    JSONB = JSON
 from sqlalchemy.orm import relationship, DeclarativeBase
 from sqlalchemy.sql import func
 import enum
@@ -80,10 +84,13 @@ class RoomStatus(str, enum.Enum):
 class ContractStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     ACTIVE = "ACTIVE"
+    PAYMENT_OVERDUE = "PAYMENT_OVERDUE"
+    NO_RESPONSE = "NO_RESPONSE"
     ENDED = "ENDED"
     CANCELLED = "CANCELLED"
     EXPIRED = "EXPIRED"
     TERMINATED = "TERMINATED"
+    ABANDONED_ROOM = "ABANDONED_ROOM"
 
 class DepositAction(str, enum.Enum):
     REFUND = "REFUND"
@@ -94,12 +101,26 @@ class InvoiceStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     SENT = "SENT"
     UNPAID = "UNPAID"
+    PARTIAL = "PARTIAL"
     PENDING_CONFIRMATION = "PENDING_CONFIRMATION"  # Tenant uploaded proof, waiting landlord
     PAID = "PAID"
     OVERDUE = "OVERDUE"
     CANCELLED = "CANCELLED"
     WAITING_VERIFY = "WAITING_VERIFY"
     REJECTED = "REJECTED"
+
+class TerminationType(str, enum.Enum):
+    TENANT_EARLY_TERMINATION = "TENANT_EARLY_TERMINATION"
+    ABANDONED_ROOM = "ABANDONED_ROOM"
+    CONTRACT_EXPIRED = "CONTRACT_EXPIRED"
+    LANDLORD_TERMINATION = "LANDLORD_TERMINATION"
+    FORCE_MAJEURE = "FORCE_MAJEURE"
+    DEPOSIT_FORFEITURE = "DEPOSIT_FORFEITURE"
+
+class DebtStatus(str, enum.Enum):
+    OPEN = "OPEN"
+    SETTLED = "SETTLED"
+    WRITTEN_OFF = "WRITTEN_OFF"
 
 class PaymentMethod(str, enum.Enum):
     CASH = "CASH"
@@ -530,6 +551,57 @@ class ContractLog(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
 
     contract = relationship("Contract", back_populates="contract_logs")
+
+
+class TerminationHistory(Base):
+    __tablename__ = "termination_histories"
+    __table_args__ = (
+        Index("ix_termination_histories_org_created", "organization_id", "created_at"),
+    )
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    contract_id = Column(UUID(as_uuid=False), ForeignKey("contracts.id"), nullable=False, index=True)
+    termination_type = Column(Enum(TerminationType), nullable=False)
+    reason = Column(String(500))
+    note = Column(Text)
+    created_by = Column(UUID(as_uuid=False), ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    final_invoice_id = Column(UUID(as_uuid=False), ForeignKey("invoices.id"))
+    deposit_used = Column(BigInteger, default=0)
+    refund_amount = Column(BigInteger, default=0)
+    remaining_debt = Column(BigInteger, default=0)
+
+    contract_snapshot = Column(JSONB)
+    metadata_ = Column("metadata", JSONB)
+
+    contract = relationship("Contract")
+    final_invoice = relationship("Invoice")
+
+
+class DebtRecord(Base):
+    __tablename__ = "debt_records"
+    __table_args__ = (
+        Index("ix_debt_records_org_status", "organization_id", "status"),
+    )
+
+    id = Column(UUID(as_uuid=False), primary_key=True, default=gen_uuid)
+    organization_id = Column(UUID(as_uuid=False), ForeignKey("organizations.id"), nullable=False, index=True)
+    contract_id = Column(UUID(as_uuid=False), ForeignKey("contracts.id"), nullable=False, index=True)
+    tenant_id = Column(UUID(as_uuid=False), ForeignKey("tenants.id"), nullable=False, index=True)
+    invoice_id = Column(UUID(as_uuid=False), ForeignKey("invoices.id"))
+
+    amount = Column(BigInteger, nullable=False, default=0)
+    status = Column(Enum(DebtStatus), nullable=False, default=DebtStatus.OPEN)
+    risk_flag = Column(Boolean, default=False)
+    note = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    contract = relationship("Contract")
+    tenant = relationship("Tenant")
+    invoice = relationship("Invoice")
 
 
 class MaintenanceRequest(Base):

@@ -51,7 +51,22 @@ class DashboardService:
                 Invoice.archived_at == None
             )
         )
-        monthly_revenue = revenue_result.scalar_one() or 0
+        invoice_revenue = revenue_result.scalar_one() or 0
+
+        # Deposit deductions (forfeited deposits, penalty fees deducted from deposit)
+        from app.database.models import DepositTransaction, DepositAction
+        from sqlalchemy import extract
+        deposit_revenue_result = await self.db.execute(
+            select(func.sum(DepositTransaction.amount)).where(
+                DepositTransaction.organization_id == oid,
+                extract('month', DepositTransaction.created_at) == now.month,
+                extract('year', DepositTransaction.created_at) == now.year,
+                DepositTransaction.type == DepositAction.DEDUCTION
+            )
+        )
+        deposit_revenue = deposit_revenue_result.scalar_one() or 0
+        
+        monthly_revenue = invoice_revenue + deposit_revenue
 
         # Outstanding debt
         outstanding_result = await self.db.execute(
@@ -113,14 +128,32 @@ class DashboardService:
             .group_by(Invoice.billing_month)
             .order_by(Invoice.billing_month)
         )
+        
+        from app.database.models import DepositTransaction, DepositAction
+        from sqlalchemy import extract
+        deposit_result = await self.db.execute(
+            select(
+                extract('month', DepositTransaction.created_at).label("month"),
+                func.sum(DepositTransaction.amount).label("revenue"),
+            )
+            .where(
+                DepositTransaction.organization_id == self.organization_id,
+                extract('year', DepositTransaction.created_at) == year,
+                DepositTransaction.type == DepositAction.DEDUCTION
+            )
+            .group_by(extract('month', DepositTransaction.created_at))
+        )
+        
         months = ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12"]
         data = {row[0]: {"revenue": row[1] or 0, "billed": row[2] or 0} for row in result}
+        deposit_data = {int(row[0]): row[1] or 0 for row in deposit_result}
+        
         return [
             {
                 "month": months[i],
                 "month_number": i + 1,
-                "revenue": data.get(i + 1, {}).get("revenue", 0),
-                "billed": data.get(i + 1, {}).get("billed", 0),
+                "revenue": data.get(i + 1, {}).get("revenue", 0) + deposit_data.get(i + 1, 0),
+                "billed": data.get(i + 1, {}).get("billed", 0) + deposit_data.get(i + 1, 0),
             }
             for i in range(12)
         ]

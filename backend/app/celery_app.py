@@ -59,6 +59,11 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.contract_tasks.auto_expire_contracts",
         "schedule": crontab(hour=2, minute=0),
     },
+    # Advance abandoned pipeline daily at 02:30
+    "advance-abandoned-contracts": {
+        "task": "app.tasks.contract_tasks.advance_abandoned_contracts",
+        "schedule": crontab(hour=2, minute=30),
+    },
     # Clean up old notifications weekly on Sunday at 03:00
     "cleanup-old-notifications": {
         "task": "app.tasks.notification_tasks.cleanup_old_notifications",

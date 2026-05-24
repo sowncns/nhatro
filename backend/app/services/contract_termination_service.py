@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from app.database.models import (
     Contract, Room, Tenant, RoomTenant, MeterReading, 
     Invoice, DepositTransaction, ContractLog, User,
-    ContractStatus, RoomStatus, DepositAction, ReadingType
+    ContractStatus, RoomStatus, DepositAction, ReadingType, InvoiceStatus
 )
 from app.schemas.schemas import ContractTerminateRequest, InvoiceCreate
 from app.services.invoice_service import InvoiceService
@@ -88,18 +88,47 @@ class ContractTerminationService:
                 self.db.add(final_meter)
                 await self.db.flush()
 
-                # 3. Generate Final Invoice
+                # 3. Generate or update final invoice for the move-out period.
                 elec_amount = int(final_meter.electricity_usage * (room.electricity_price or 0))
                 water_amount = int(final_meter.water_usage * (room.water_price or 0))
-                
-                last_invoice_result = await self.db.execute(
+
+                billing_month = data.actual_end_date.month
+                billing_year = data.actual_end_date.year
+
+                current_invoice_result = await self.db.execute(
                     select(Invoice)
-                    .where(Invoice.room_id == room.id, Invoice.organization_id == self.organization_id)
+                    .where(
+                        Invoice.room_id == room.id,
+                        Invoice.organization_id == self.organization_id,
+                        Invoice.billing_month == billing_month,
+                        Invoice.billing_year == billing_year,
+                        Invoice.status != InvoiceStatus.CANCELLED,
+                    )
                     .order_by(Invoice.created_at.desc())
                     .limit(1)
                 )
+                current_invoice = current_invoice_result.scalar_one_or_none()
+
+                last_invoice_result = await self.db.execute(
+                    select(Invoice)
+                    .where(
+                        Invoice.room_id == room.id,
+                        Invoice.organization_id == self.organization_id,
+                        Invoice.status != InvoiceStatus.CANCELLED,
+                        ~(
+                            (Invoice.billing_month == billing_month)
+                            & (Invoice.billing_year == billing_year)
+                        ),
+                    )
+                    .order_by(Invoice.billing_year.desc(), Invoice.billing_month.desc(), Invoice.created_at.desc())
+                    .limit(1)
+                )
                 last_invoice = last_invoice_result.scalar_one_or_none()
-                old_debt = max(0, (last_invoice.total_amount or 0) - (last_invoice.paid_amount or 0)) if last_invoice else 0
+                old_debt = (
+                    current_invoice.old_debt
+                    if current_invoice and current_invoice.old_debt is not None
+                    else max(0, (last_invoice.total_amount or 0) - (last_invoice.paid_amount or 0)) if last_invoice else 0
+                )
 
                 # Get org defaults for fees
                 from app.database.models import Organization
@@ -117,8 +146,8 @@ class ContractTerminationService:
 
                 invoice_data = InvoiceCreate(
                     room_id=room.id,
-                    billing_month=data.actual_end_date.month,
-                    billing_year=data.actual_end_date.year,
+                    billing_month=billing_month,
+                    billing_year=billing_year,
                     rent_amount=contract.monthly_rent,
                     electricity_amount=elec_amount,
                     water_amount=water_amount,
@@ -129,7 +158,35 @@ class ContractTerminationService:
                     due_date=data.actual_end_date,
                     notes=f"Hóa đơn thanh lý hợp đồng {contract.contract_number}"
                 )
-                final_invoice = await self.invoice_service.create_invoice(invoice_data, contract_id=contract.id, force_create=True)
+                if current_invoice:
+                    current_invoice.contract_id = current_invoice.contract_id or contract.id
+                    current_invoice.rent_amount = invoice_data.rent_amount
+                    current_invoice.electricity_amount = invoice_data.electricity_amount
+                    current_invoice.water_amount = invoice_data.water_amount
+                    current_invoice.internet_amount = invoice_data.internet_amount
+                    current_invoice.parking_amount = invoice_data.parking_amount
+                    current_invoice.vehicle_count = invoice_data.vehicle_count
+                    current_invoice.old_debt = invoice_data.old_debt
+                    current_invoice.due_date = invoice_data.due_date
+                    current_invoice.notes = invoice_data.notes
+                    current_invoice.total_amount = (
+                        (current_invoice.rent_amount or 0)
+                        + (current_invoice.electricity_amount or 0)
+                        + (current_invoice.water_amount or 0)
+                        + (current_invoice.internet_amount or 0)
+                        + (current_invoice.parking_amount or 0)
+                        + (current_invoice.other_amount or 0)
+                        + (current_invoice.old_debt or 0)
+                        - (current_invoice.discount_amount or 0)
+                    )
+                    current_invoice.qr_code_url = await self.invoice_service._generate_banking_qr(current_invoice)
+                    if (current_invoice.paid_amount or 0) >= current_invoice.total_amount:
+                        current_invoice.status = InvoiceStatus.PAID
+                    elif (current_invoice.paid_amount or 0) > 0:
+                        current_invoice.status = InvoiceStatus.SENT
+                    await self.db.flush()
+                else:
+                    await self.invoice_service.create_invoice(invoice_data, contract_id=contract.id)
 
                 # 4. Settle Deposit
                 for deduction in data.deposit_deductions:

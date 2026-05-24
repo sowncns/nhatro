@@ -56,14 +56,32 @@ const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Bản nháp',
 }
 
+const MOVE_OUT_REASON_OPTIONS = [
+  'Bỏ cọc',
+  'Thanh lý trước hạn',
+  'Khách chuyển đi',
+  'Vi phạm nội quy',
+  'Chủ trọ thu hồi phòng',
+  'Khác',
+]
+
 interface TerminateForm {
   actual_end_date: string
   final_electricity: string
   final_water: string
   refund_amount: string
   move_out_reason: string
+  move_out_reason_other: string
   termination_note: string
   deposit_deductions: { reason: string; amount: string }[]
+  termination_type: string
+  penalty_fee: string
+  damage_fee: string
+  cleaning_fee: string
+  other_fee: string
+  refund_unused_rent: string
+  compensation_fee: string
+  force: boolean
 }
 
 
@@ -85,14 +103,26 @@ export default function ContractsPage() {
   // Termination Modal State
   const [showTerminateModal, setShowTerminateModal] = useState(false)
   const [terminatingContract, setTerminatingContract] = useState<Contract | null>(null)
+  const [terminatingRoom, setTerminatingRoom] = useState<any | null>(null)
+  const [orgSettings, setOrgSettings] = useState<any>({})
+  const [lastMeterReading, setLastMeterReading] = useState<{ electricity: number | null; water: number | null }>({ electricity: null, water: null })
   const [terminateForm, setTerminateForm] = useState<TerminateForm>({
     actual_end_date: today,
     final_electricity: '',
     final_water: '',
     refund_amount: '',
-    move_out_reason: 'Hết hạn hợp đồng',
+    move_out_reason: 'Thanh lý trước hạn',
+    move_out_reason_other: '',
     termination_note: '',
-    deposit_deductions: []
+    deposit_deductions: [],
+    termination_type: 'TENANT_EARLY_TERMINATION',
+    penalty_fee: '0',
+    damage_fee: '0',
+    cleaning_fee: '0',
+    other_fee: '0',
+    refund_unused_rent: '0',
+    compensation_fee: '0',
+    force: false
   })
   const { globalSearchQuery } = useSearchStore()
 
@@ -209,31 +239,87 @@ export default function ContractsPage() {
     }
   }
 
-  const handleTerminateClick = (contract: Contract) => {
+  const handleTerminateClick = async (contract: Contract) => {
     setTerminatingContract(contract)
     setTerminateForm({
-      ...terminateForm,
       actual_end_date: today,
-      refund_amount: String(contract.deposit_amount)
+      final_electricity: '',
+      final_water: '',
+      refund_amount: String(contract.deposit_amount),
+      move_out_reason: '',
+      move_out_reason_other: '',
+      termination_note: '',
+      deposit_deductions: [],
+      termination_type: 'TENANT_EARLY_TERMINATION',
+      penalty_fee: '0',
+      damage_fee: '0',
+      cleaning_fee: '0',
+      other_fee: '0',
+      refund_unused_rent: '0',
+      compensation_fee: '0',
+      force: false
     })
+    // Fetch last meter reading and org settings for pricing
+    try {
+      const [meterRes, orgRes] = await Promise.allSettled([
+        api.getMeterReadings({ room_id: contract.room_id, size: 1, mode: 'history' }),
+        api.getOrganization()
+      ])
+      if (meterRes.status === 'fulfilled') {
+        const last = meterRes.value.data?.items?.[0]
+        setLastMeterReading({
+          electricity: last?.electricity_current ?? null,
+          water: last?.water_current ?? null,
+        })
+      } else {
+        setLastMeterReading({ electricity: null, water: null })
+      }
+      if (orgRes.status === 'fulfilled') {
+        setOrgSettings(orgRes.value.data?.settings || {})
+      }
+    } catch {
+      setLastMeterReading({ electricity: null, water: null })
+    }
+    // Use room data from already-loaded allRooms
+    const room = allRooms.find(r => r.id === contract.room_id)
+    setTerminatingRoom(room || null)
     setShowTerminateModal(true)
   }
 
   const submitTermination = async () => {
     if (!terminatingContract) return
+    const TERMINATION_LABELS: Record<string, string> = {
+      TENANT_EARLY_TERMINATION: 'Khách trả sớm',
+      DEPOSIT_FORFEITURE: 'Bỏ cọc (chưa dọn vào)',
+      ABANDONED_ROOM: 'Bỏ phòng (không liên lạc)',
+      LANDLORD_TERMINATION: 'Chủ trọ kết thúc',
+      FORCE_MAJEURE: 'Bất khả kháng'
+    }
+    const moveOutReason = TERMINATION_LABELS[terminateForm.termination_type] || terminateForm.termination_type
+
     setIsSaving(true)
     try {
-      await api.terminateContract(terminatingContract.id, {
+      await api.terminateContractV2(terminatingContract.id, {
+        termination_type: terminateForm.termination_type,
+        reason: moveOutReason,
+        note: terminateForm.termination_note,
         actual_end_date: terminateForm.actual_end_date,
-        final_electricity: Number(terminateForm.final_electricity),
-        final_water: Number(terminateForm.final_water),
-        refund_amount: Number(terminateForm.refund_amount),
-        move_out_reason: terminateForm.move_out_reason,
-        termination_note: terminateForm.termination_note,
-        deposit_deductions: terminateForm.deposit_deductions.map(d => ({
-          reason: d.reason,
-          amount: Number(d.amount)
-        }))
+        final_electricity: terminateForm.final_electricity ? Number(terminateForm.final_electricity) : null,
+        final_water: terminateForm.final_water ? Number(terminateForm.final_water) : null,
+        penalty_fee: Number(terminateForm.penalty_fee || 0),
+        damage_fee: Number(terminateForm.damage_fee || 0),
+        cleaning_fee: Number(terminateForm.cleaning_fee || 0),
+        other_fee: Number(terminateForm.other_fee || 0),
+        refund_unused_rent: Number(terminateForm.refund_unused_rent || 0),
+        compensation_fee: Number(terminateForm.compensation_fee || 0),
+        force: !!terminateForm.force,
+        metadata: {
+          deposit_deductions: terminateForm.deposit_deductions.map(d => ({
+            reason: d.reason,
+            amount: Number(d.amount)
+          })),
+          refund_amount: Number(terminateForm.refund_amount || 0),
+        }
       })
       toast.success('Đã thanh lý hợp đồng thành công')
       setShowTerminateModal(false)
@@ -779,26 +865,71 @@ export default function ContractsPage() {
             </div>
 
             <div className="mt-6 space-y-6">
-              {/* Chỉ số cuối */}
+              {/* Loại kết thúc hợp đồng */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Chỉ số điện cuối (kWh)</label>
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Loại kết thúc</label>
+                  <select
+                    value={terminateForm.termination_type}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, termination_type: e.target.value })}
+                    className={cls}
+                  >
+                    <option value="TENANT_EARLY_TERMINATION">Khách trả sớm</option>
+                    <option value="DEPOSIT_FORFEITURE">Bỏ cọc (chưa dọn vào)</option>
+                    <option value="ABANDONED_ROOM">Bỏ phòng (không liên lạc)</option>
+                    <option value="LANDLORD_TERMINATION">Chủ trọ kết thúc</option>
+                    <option value="FORCE_MAJEURE">Bất khả kháng</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Tùy chọn</label>
+                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={terminateForm.force}
+                      onChange={(e) => setTerminateForm({ ...terminateForm, force: e.target.checked })}
+                    />
+                    Force terminate (chỉ dùng cho Bỏ phòng)
+                  </label>
+                </div>
+              </div>
+
+              {terminateForm.termination_type !== 'DEPOSIT_FORFEITURE' && (
+              <>
+                  {/* Chỉ số cuối */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                    Chỉ số điện cuối (kWh)
+                    {lastMeterReading.electricity !== null && (
+                      <span className="ml-2 font-normal normal-case text-slate-400">
+                        — lần trước: <span className="font-semibold text-emerald-500">{lastMeterReading.electricity}</span>
+                      </span>
+                    )}
+                  </label>
                   <input
                     type="number"
                     value={terminateForm.final_electricity}
                     onChange={(e) => setTerminateForm({ ...terminateForm, final_electricity: e.target.value })}
                     className={cls}
-                    placeholder="VD: 1250"
+                    placeholder={lastMeterReading.electricity !== null ? `Lần trước: ${lastMeterReading.electricity}` : 'VD: 1250'}
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Chỉ số nước cuối (m³)</label>
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">
+                    Chỉ số nước cuối (m³)
+                    {lastMeterReading.water !== null && (
+                      <span className="ml-2 font-normal normal-case text-slate-400">
+                        — lần trước: <span className="font-semibold text-emerald-500">{lastMeterReading.water}</span>
+                      </span>
+                    )}
+                  </label>
                   <input
                     type="number"
                     value={terminateForm.final_water}
                     onChange={(e) => setTerminateForm({ ...terminateForm, final_water: e.target.value })}
                     className={cls}
-                    placeholder="VD: 450"
+                    placeholder={lastMeterReading.water !== null ? `Lần trước: ${lastMeterReading.water}` : 'VD: 450'}
                   />
                 </div>
               </div>
@@ -813,18 +944,11 @@ export default function ContractsPage() {
                     className={cls}
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Lý do rời đi</label>
-                  <input
-                    type="text"
-                    value={terminateForm.move_out_reason}
-                    onChange={(e) => setTerminateForm({ ...terminateForm, move_out_reason: e.target.value })}
-                    className={cls}
-                  />
-                </div>
+                
               </div>
 
-              {/* Tiền cọc & Khấu trừ */}
+              {/* Khấu trừ tiền cọc & Phí phát sinh – Ẩn khi ABANDONED_ROOM */}
+              {terminateForm.termination_type !== 'ABANDONED_ROOM' && (
               <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-950/50">
                 <div className="flex items-center justify-between mb-4">
                   <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Khấu trừ tiền cọc & Phí phát sinh</label>
@@ -883,6 +1007,140 @@ export default function ContractsPage() {
                   <p className="mt-1 text-[10px] text-right text-slate-400">Tiền cọc gốc: {vnd.format(terminatingContract.deposit_amount)}</p>
                 </div>
               </div>
+              )}
+
+              {/* Phí & hoàn tiền – Ẩn khi ABANDONED_ROOM */}
+              {terminateForm.termination_type !== 'ABANDONED_ROOM' && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Phí phạt</label>
+                  <input
+                    type="number"
+                    value={terminateForm.penalty_fee}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, penalty_fee: e.target.value })}
+                    className={cls}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Phí hư hỏng</label>
+                  <input
+                    type="number"
+                    value={terminateForm.damage_fee}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, damage_fee: e.target.value })}
+                    className={cls}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Phí dọn phòng</label>
+                  <input
+                    type="number"
+                    value={terminateForm.cleaning_fee}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, cleaning_fee: e.target.value })}
+                    className={cls}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Khoản khác</label>
+                  <input
+                    type="number"
+                    value={terminateForm.other_fee}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, other_fee: e.target.value })}
+                    className={cls}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Hoàn tiền phòng (nếu có)</label>
+                  <input
+                    type="number"
+                    value={terminateForm.refund_unused_rent}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, refund_unused_rent: e.target.value })}
+                    className={cls}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Bồi thường (nếu có)</label>
+                  <input
+                    type="number"
+                    value={terminateForm.compensation_fee}
+                    onChange={(e) => setTerminateForm({ ...terminateForm, compensation_fee: e.target.value })}
+                    className={cls}
+                  />
+                </div>
+              </div>
+              )}
+
+              {/* Preview tính tiền theo ngày khi ABANDONED_ROOM */}
+              {terminateForm.termination_type === 'ABANDONED_ROOM' && (() => {
+                const endDate = new Date(terminateForm.actual_end_date)
+                const daysUsed = endDate.getDate()
+                const daysInMonth = new Date(endDate.getFullYear(), endDate.getMonth() + 1, 0).getDate()
+
+                // Fixed fees
+                const rent = terminatingContract?.monthly_rent || 0
+                const internetPrice = terminatingRoom?.internet_fee || Number(orgSettings?.default_internet_fee) || 0
+                const parkingPrice = terminatingRoom?.parking_fee || Number(orgSettings?.default_parking_fee) || 0
+                const vehicleCount = terminatingContract?.vehicle_count || 0
+                const parking = parkingPrice * vehicleCount
+                const otherFee = Number(orgSettings?.default_service_fee) || 0
+                
+                const totalFixed = rent + internetPrice + parking + otherFee
+                const prorated = Math.round(totalFixed * (daysUsed / daysInMonth))
+
+                // Electricity & water estimate (usage = current - previous)
+                const elecCurrent = Number(terminateForm.final_electricity) || 0
+                const waterCurrent = Number(terminateForm.final_water) || 0
+                const elecPrev = lastMeterReading.electricity ?? 0
+                const waterPrev = lastMeterReading.water ?? 0
+                const elecUsage = Math.max(0, elecCurrent - elecPrev)
+                const waterUsage = Math.max(0, waterCurrent - waterPrev)
+                // Giá điện/nước: ưu tiên từ phòng, fallback từ cài đặt tổ chức
+                const elecPrice = terminatingRoom?.electricity_price || orgSettings?.default_electricity_price || 0
+                const waterPrice = terminatingRoom?.water_price || orgSettings?.default_water_price || 0
+                const elecCost = Math.round(elecUsage * elecPrice)
+                const waterCost = Math.round(waterUsage * waterPrice)
+
+                const total = prorated + elecCost + waterCost
+                const hasUtility = elecCurrent > 0 || waterCurrent > 0
+
+                return (
+                  <div className="rounded-2xl border border-orange-200 bg-orange-50 p-4 dark:border-orange-900 dark:bg-orange-950/20">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-orange-500 mb-3">Ước tính hóa đơn (Bỏ phòng)</p>
+                    <div className="space-y-1.5 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Số ngày sử dụng</span>
+                        <span className="font-medium">{daysUsed} / {daysInMonth} ngày</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500 text-[11px] max-w-[70%]">
+                          (Phòng {vnd.format(rent)}
+                          {internetPrice > 0 ? ` + Internet ${vnd.format(internetPrice)}` : ''}
+                          {parking > 0 ? ` + Xe ${vnd.format(parking)}` : ''}
+                          {otherFee > 0 ? ` + Phí khác ${vnd.format(otherFee)}` : ''}) × {daysUsed}/{daysInMonth}
+                        </span>
+                        <span className="font-medium">{vnd.format(prorated)}</span>
+                      </div>
+                      {hasUtility ? (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Điện ({elecUsage} kWh × {vnd.format(terminatingRoom?.electricity_price || 0)})</span>
+                            <span className="font-medium">{vnd.format(elecCost)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Nước ({waterUsage} m³ × {vnd.format(terminatingRoom?.water_price || 0)})</span>
+                            <span className="font-medium">{vnd.format(waterCost)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-[10px] text-slate-400">Nhập chỉ số điện/nước ở trên để xem ước tính đầy đủ</p>
+                      )}
+                      <div className="flex justify-between border-t-2 border-orange-300 pt-2 mt-1 dark:border-orange-700">
+                        <span className="font-bold text-orange-700 dark:text-orange-400">Tổng ước tính</span>
+                        <span className="font-bold text-lg text-orange-700 dark:text-orange-400">{vnd.format(total)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold uppercase tracking-wider text-slate-400">Ghi chú thanh lý</label>
@@ -894,12 +1152,14 @@ export default function ContractsPage() {
                   placeholder="Ghi chú thêm nếu cần..."
                 />
               </div>
+             
+            </>
+              )}
             </div>
-
             <div className="mt-8 flex gap-3">
               <button
                 onClick={submitTermination}
-                disabled={isSaving || !terminateForm.final_electricity || !terminateForm.final_water}
+                disabled={isSaving || (terminateForm.termination_type !== 'DEPOSIT_FORFEITURE' && (!terminateForm.final_electricity || !terminateForm.final_water))}
                 className="flex-1 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-red-600 font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-700 disabled:bg-slate-300 dark:disabled:bg-slate-800"
               >
                 {isSaving && <Loader2 className="h-5 w-5 animate-spin" />}

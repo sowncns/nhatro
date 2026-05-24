@@ -7,6 +7,7 @@ from app.api.v1.endpoints import (
     boarding_houses,
     contracts,
     dashboard,
+    debts,
     invoices,
     meter_readings,
     organizations,
@@ -31,6 +32,7 @@ api_router.include_router(boarding_houses.router, prefix="/boarding-houses", tag
 api_router.include_router(rooms.router, prefix="/rooms", tags=["Rooms"])
 api_router.include_router(tenants.router, prefix="/tenants", tags=["Tenants"])
 api_router.include_router(contracts.router, prefix="/contracts", tags=["Contracts"])
+api_router.include_router(debts.router, prefix="/debts", tags=["Debts"])
 api_router.include_router(meter_readings.router, prefix="/meter-readings", tags=["Meter Readings"])
 api_router.include_router(invoices.router, prefix="/invoices", tags=["Invoices"])
 api_router.include_router(payments.router, prefix="/payments", tags=["Payments"])

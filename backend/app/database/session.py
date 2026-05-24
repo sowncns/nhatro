@@ -23,8 +23,10 @@ def _database_url_and_connect_args() -> tuple[str, dict]:
         
         connect_args["ssl"] = ssl_context
     if settings.DATABASE_DISABLE_PREPARED_STATEMENT_CACHE:
+        import uuid
         connect_args["prepared_statement_cache_size"] = 0
         connect_args["statement_cache_size"] = 0
+        connect_args["prepared_statement_name_func"] = lambda: f"stmt_{uuid.uuid4().hex}"
 
     database_url = urlunsplit(
         (

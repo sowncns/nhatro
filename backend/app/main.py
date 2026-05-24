@@ -43,15 +43,37 @@ async def lifespan(app: FastAPI):
                     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'complaintstatus') THEN
                         CREATE TYPE complaintstatus AS ENUM ('pending', 'processing', 'completed');
                     END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'terminationtype') THEN
+                        CREATE TYPE terminationtype AS ENUM (
+                            'TENANT_EARLY_TERMINATION',
+                            'ABANDONED_ROOM',
+                            'CONTRACT_EXPIRED',
+                            'LANDLORD_TERMINATION',
+                            'FORCE_MAJEURE',
+                            'DEPOSIT_FORFEITURE'
+                        );
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'debtstatus') THEN
+                        CREATE TYPE debtstatus AS ENUM ('OPEN', 'SETTLED', 'WRITTEN_OFF');
+                    END IF;
                     -- Add missing values to existing enums
                     BEGIN ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'platform_admin'; EXCEPTION WHEN duplicate_object THEN NULL; END;
                     BEGIN ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'starter'; EXCEPTION WHEN duplicate_object THEN NULL; END;
                     BEGIN ALTER TYPE subscriptionplan ADD VALUE IF NOT EXISTS 'scale'; EXCEPTION WHEN duplicate_object THEN NULL; END;
                     BEGIN ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'WAITING_VERIFY'; EXCEPTION WHEN duplicate_object THEN NULL; END;
                     BEGIN ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'REJECTED'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'UNPAID'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE invoicestatus ADD VALUE IF NOT EXISTS 'PARTIAL'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE contractstatus ADD VALUE IF NOT EXISTS 'PAYMENT_OVERDUE'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE contractstatus ADD VALUE IF NOT EXISTS 'NO_RESPONSE'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE contractstatus ADD VALUE IF NOT EXISTS 'ABANDONED_ROOM'; EXCEPTION WHEN duplicate_object THEN NULL; END;
+                    BEGIN ALTER TYPE terminationtype ADD VALUE IF NOT EXISTS 'DEPOSIT_FORFEITURE'; EXCEPTION WHEN duplicate_object THEN NULL; END;
                 END $$;
             """))
-        await conn.run_sync(Base.metadata.create_all)
+        try:
+            await conn.run_sync(Base.metadata.create_all)
+        except Exception as e:
+            logger.warning(f"Error during create_all: {e}")
     logger.info("Database tables created/verified")
     yield
     
@@ -81,6 +103,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 @app.middleware("http")
 async def add_process_time(request: Request, call_next):
@@ -142,16 +169,19 @@ def _get_cors_headers(request: Request) -> dict:
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Convert errors to JSON-serializable dict using fastapi encoder
+    from fastapi.encoders import jsonable_encoder
+    errors_data = jsonable_encoder(exc.errors())
     try:
         with open("d:\\nhatro\\backend\\error_log.txt", "a", encoding="utf-8") as f:
             f.write(f"\n=== VALIDATION ERROR AT {request.method} {request.url.path} ===\n")
-            f.write(str(exc.errors()))
+            f.write(str(errors_data))
             f.write("\n==============================================\n")
     except Exception:
         pass
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"detail": exc.errors()},
+        content={"detail": errors_data},
         headers=_get_cors_headers(request),
     )
 
